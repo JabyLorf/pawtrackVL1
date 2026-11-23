@@ -5,6 +5,8 @@ import { ago, dogMatches, inCare, peso, statusClass } from '../lib/utils'
 import type { Activity, Adoption, Dog, DogStatus, Donation, InboxMessage, Profile } from '../types'
 import { ADD_STATUSES, AGES, SEXES, SIZES } from '../types'
 import { DogPeek } from '../components/DogPeek'
+import { DogPhoto } from '../components/DogCard'
+import { useDevice } from '../context/DeviceContext'
 import { useAuth } from '../context/AuthContext'
 import { Modal } from '../components/Modal'
 import { ClipboardList, HandCoins, HeartHandshake, Inbox, PawPrint, Stethoscope, Syringe, Tag, UserCheck, UserX, X } from 'lucide-react'
@@ -83,6 +85,38 @@ function DogTable({
   extra?: (d: Dog) => ReactNode
 }) {
   const [peek, setPeek] = useState<string | null>(null)
+  const { kind } = useDevice()
+
+  if (kind === 'phone') {
+    return (
+      <>
+        <div className="dog-list">
+          {list.length ? list.map((d) => (
+            <div className="dog-row" key={d.id}>
+              <button className="dog-row-main" type="button" onClick={() => setPeek(d.id)} aria-label={`View ${d.name}`}>
+                <DogPhoto dog={d} className="dog-row-photo" />
+                <div className="dog-row-info">
+                  <div className="dog-row-top">
+                    <b>{d.name}</b>
+                    <span className={`status ${statusClass(d.status)}`}>{d.status}</span>
+                  </div>
+                  <div className="dog-row-meta">{d.sex} · {d.age} · {d.breed}</div>
+                  {d.color ? <div className="dog-row-meta">{d.color}</div> : null}
+                </div>
+              </button>
+              <div className="dog-row-actions">
+                <button className="btn btn-ghost" type="button" onClick={() => setPeek(d.id)}>View</button>
+                <Link className="btn btn-ghost" to={`/ops/dogs/${d.id}`}>Edit</Link>
+                {extra?.(d)}
+              </div>
+            </div>
+          )) : <p className="empty panel">No records.</p>}
+        </div>
+        {peek ? <DogPeek dogId={peek} onClose={() => setPeek(null)} /> : null}
+      </>
+    )
+  }
+
   return (
     <>
       <div className="table-wrap">
@@ -293,10 +327,13 @@ export function DogEditPage() {
           <div><label>Temperament</label><input value={dog.temperament || ''} onChange={(e) => setDog({ ...dog, temperament: e.target.value })} /></div>
           <div className="full"><label>Story</label><textarea rows={4} value={dog.story || ''} onChange={(e) => setDog({ ...dog, story: e.target.value })} /></div>
         </div>
-        <label className="row"><input type="checkbox" checked={!!dog.vax_5in1} onChange={(e) => setDog({ ...dog, vax_5in1: e.target.checked })} /> 5-in-1</label>
-        <label className="row"><input type="checkbox" checked={!!dog.anti_rabies} onChange={(e) => setDog({ ...dog, anti_rabies: e.target.checked })} /> Anti-rabies</label>
-        <label className="row"><input type="checkbox" checked={!!dog.dewormed} onChange={(e) => setDog({ ...dog, dewormed: e.target.checked })} /> Dewormed</label>
-        <label className="row"><input type="checkbox" checked={!!dog.spayed} onChange={(e) => setDog({ ...dog, spayed: e.target.checked })} /> Spayed / Neutered</label>
+        <fieldset className="check-group">
+          <legend>Health</legend>
+          <label className="check"><input type="checkbox" checked={!!dog.vax_5in1} onChange={(e) => setDog({ ...dog, vax_5in1: e.target.checked })} /> 5-in-1 vaccine</label>
+          <label className="check"><input type="checkbox" checked={!!dog.anti_rabies} onChange={(e) => setDog({ ...dog, anti_rabies: e.target.checked })} /> Anti-rabies</label>
+          <label className="check"><input type="checkbox" checked={!!dog.dewormed} onChange={(e) => setDog({ ...dog, dewormed: e.target.checked })} /> Dewormed</label>
+          <label className="check"><input type="checkbox" checked={!!dog.spayed} onChange={(e) => setDog({ ...dog, spayed: e.target.checked })} /> Spayed / Neutered</label>
+        </fieldset>
         {error ? <p className="err">{error}</p> : null}
         <button className="btn btn-coral btn-block" type="submit">Save</button>
       </form>
@@ -339,7 +376,40 @@ export function AdoptionsPage() {
     } else setIdUrl('')
   }
 
+  const { kind } = useDevice()
+
   function table(list: typeof rows, pending: boolean, empty: string) {
+    if (kind === 'phone') {
+      return (
+        <div className="dog-list">
+          {list.length ? list.map((a) => (
+            <div className="dog-row" key={a.id}>
+              <div className="dog-row-main">
+                <span className="person-avatar">{a.applicant.slice(0, 1).toUpperCase()}</span>
+                <div className="dog-row-info">
+                  <div className="dog-row-top">
+                    <b>{a.applicant}</b>
+                    <span className={`status ${statusClass(a.status)}`}>{a.status}</span>
+                  </div>
+                  <div className="dog-row-meta">Wants to adopt <b>{a.dogs?.name || 'a dog'}</b></div>
+                  <div className="dog-row-meta"><a href={`tel:${a.phone}`}>{a.phone}</a> · {ago(a.created_at)} · {a.id_photo_url ? 'ID attached' : 'No ID'}</div>
+                  {a.note ? <div className="dog-row-note">{a.note}</div> : null}
+                </div>
+              </div>
+              <div className="dog-row-actions">
+                <button className="btn btn-ghost" type="button" onClick={() => open(a)}>View</button>
+                {pending ? (
+                  <>
+                    <button className="btn btn-primary btn-sm" type="button" onClick={() => decide(a.id, 'approve')}>Approve</button>
+                    <button className="btn btn-remove" type="button" onClick={() => decide(a.id, 'reject')}>Reject</button>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          )) : <p className="empty panel">{empty}</p>}
+        </div>
+      )
+    }
     return (
       <div className="table-wrap">
         <table>
@@ -411,21 +481,43 @@ export function DonationsPage() {
     supabase.from('donations').select('*').order('created_at', { ascending: false }).then(({ data }) => setRows((data as Donation[]) || []))
   }, [])
   const total = rows.reduce((s, d) => s + Number(d.amount), 0)
+  const { kind } = useDevice()
   return (
     <div>
       <h1 className="page-h1">Donations</h1>
       <p className="page-sub">Gifts are added to the total as soon as they are sent.</p>
       <div className="kpi" style={{ maxWidth: 240, marginBottom: 16 }}><div className="n">{peso(total)}</div><div className="l">Donations received</div></div>
-      <div className="table-wrap">
-        <table>
-          <thead><tr><th>From</th><th>Amount</th><th>Purpose</th><th>Method</th><th>When</th></tr></thead>
-          <tbody>
-            {rows.map((d) => (
-              <tr key={d.id}><td>{d.name}</td><td>{peso(Number(d.amount))}</td><td>{d.purpose}</td><td>{d.method}</td><td>{ago(d.created_at)}</td></tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {kind === 'phone' ? (
+        <div className="dog-list">
+          {rows.length ? rows.map((d) => (
+            <div className="dog-row" key={d.id}>
+              <div className="dog-row-main">
+                <span className="person-avatar"><HandCoins size={18} /></span>
+                <div className="dog-row-info">
+                  <div className="dog-row-top">
+                    <b>{d.name}</b>
+                    <span className="amount">{peso(Number(d.amount))}</span>
+                  </div>
+                  <div className="dog-row-meta">{d.purpose} · {d.method}</div>
+                  <div className="dog-row-meta">{ago(d.created_at)}</div>
+                  {d.message ? <div className="dog-row-note">{d.message}</div> : null}
+                </div>
+              </div>
+            </div>
+          )) : <p className="empty panel">No donations yet.</p>}
+        </div>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>From</th><th>Amount</th><th>Purpose</th><th>Method</th><th>When</th></tr></thead>
+            <tbody>
+              {rows.length ? rows.map((d) => (
+                <tr key={d.id}><td>{d.name}</td><td>{peso(Number(d.amount))}</td><td>{d.purpose}</td><td>{d.method}</td><td>{ago(d.created_at)}</td></tr>
+              )) : <tr><td colSpan={5} className="empty">No donations yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

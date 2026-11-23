@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { PublicLayout } from '../components/PublicLayout'
+import { Modal } from '../components/Modal'
+import { CheckCircle2, Send } from 'lucide-react'
 
 export function DonatePage() {
   const [amount, setAmount] = useState('500')
@@ -97,25 +99,36 @@ export function ContactPage() {
   const [email, setEmail] = useState('')
   const [subject, setSubject] = useState('General')
   const [text, setText] = useState('')
-  const [ok, setOk] = useState(false)
   const [error, setError] = useState('')
+  const [step, setStep] = useState<'form' | 'confirm' | 'sent'>('form')
+  const [busy, setBusy] = useState(false)
 
-  async function submit(e: FormEvent) {
+  function review(e: FormEvent) {
     e.preventDefault()
-    if (!name || !text) { setError('Name and message are required.'); return }
-    const { error: err } = await supabase.from('inbox_messages').insert({
-      name, email, subject, body: text, kind: 'contact',
-    })
-    if (err) { setError(err.message); return }
-    setOk(true)
+    if (!name.trim() || !text.trim()) { setError('Name and message are required.'); return }
     setError('')
+    setStep('confirm')
+  }
+
+  async function send() {
+    setBusy(true)
+    const { error: err } = await supabase.from('inbox_messages').insert({
+      name: name.trim(), email: email.trim(), subject: subject.trim() || 'General', body: text.trim(), kind: 'contact',
+    })
+    setBusy(false)
+    if (err) { setStep('form'); setError(err.message); return }
+    setStep('sent')
+    setName('')
+    setEmail('')
+    setSubject('General')
+    setText('')
   }
 
   return (
     <PublicLayout>
       <section className="block">
         <div className="container split">
-          <form className="card-panel" onSubmit={submit}>
+          <form className="card-panel" onSubmit={review}>
             <h3>Send us a message</h3>
             <label>Name *</label>
             <input value={name} onChange={(e) => setName(e.target.value)} required />
@@ -126,8 +139,7 @@ export function ContactPage() {
             <label>Message *</label>
             <textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} />
             {error ? <p className="err">{error}</p> : null}
-            {ok ? <p className="ok">Message sent. Staff will see it in the inbox.</p> : null}
-            <button className="btn btn-accent btn-block btn-pill" type="submit">Send</button>
+            <button className="btn btn-primary btn-block" type="submit"><Send size={17} /> Send message</button>
           </form>
           <div className="card-panel">
             <h3>Visit us</h3>
@@ -138,6 +150,35 @@ export function ContactPage() {
           </div>
         </div>
       </section>
+      {step === 'confirm' ? (
+        <Modal onClose={() => { if (!busy) setStep('form') }}>
+          <div className="dialog">
+            <div className="auth-icon"><Send size={22} /></div>
+            <h2>Send this message?</h2>
+            <p className="auth-sub">Please check your message. You can't change it after it's sent.</p>
+            <div className="adopt-review">
+              <div><span>Name</span><b>{name}</b></div>
+              {email ? <div><span>Email</span><b>{email}</b></div> : null}
+              <div><span>Subject</span><b>{subject || 'General'}</b></div>
+            </div>
+            <p className="dialog-quote">{text}</p>
+            <div className="dialog-actions">
+              <button className="btn btn-light" type="button" disabled={busy} onClick={() => setStep('form')}>Edit message</button>
+              <button className="btn btn-primary" type="button" disabled={busy} onClick={send}>{busy ? 'Sending…' : 'Yes, send it'}</button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+      {step === 'sent' ? (
+        <Modal onClose={() => setStep('form')}>
+          <div className="dialog center">
+            <div className="auth-icon success"><CheckCircle2 size={26} /></div>
+            <h2>Your message has been sent</h2>
+            <p className="auth-sub">Thank you! Our staff will read it and get back to you as soon as they can.</p>
+            <button className="btn btn-primary btn-block" type="button" onClick={() => setStep('form')}>OK</button>
+          </div>
+        </Modal>
+      ) : null}
     </PublicLayout>
   )
 }
