@@ -96,7 +96,6 @@ export function OpsLayout() {
         ) : null}
         <div className="ops-foot">
           <button className="btn btn-light" type="button" onClick={() => navigate('/')}>View public website</button>
-          <button className="btn btn-ghost" type="button" onClick={() => navigate('/community')}>Open community</button>
           <button className="btn btn-ghost" type="button" onClick={() => signOut().then(() => navigate('/'))}>Sign out</button>
         </div>
       </aside>

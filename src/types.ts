@@ -14,9 +14,6 @@ export type AdoptionStatus = 'pending' | 'approved' | 'rejected'
 export type DonationMethod = 'GCash' | 'Bank Transfer' | 'Cash / Walk-in' | 'In-kind Donation'
 export type MessageKind = 'contact' | 'adoption' | 'donation'
 
-export type MediaType = 'photo' | 'video'
-export type ReportStatus = 'pending' | 'resolved' | 'dismissed'
-
 export type Profile = {
   id: string
   username: string
@@ -24,74 +21,6 @@ export type Profile = {
   email: string | null
   role: UserRole
   status: AccountStatus
-  bio: string
-  avatar_url: string
-  avatar_hue: number
-  private_account: boolean
-  followers_count?: number
-  following_count?: number
-  likes_total?: number
-}
-
-export type Post = {
-  id: string
-  user_id: string
-  media_url: string
-  media_type: MediaType
-  caption: string
-  likes_count: number
-  comments_count: number
-  reposts_count: number
-  hidden: boolean
-  created_at: string
-}
-
-export type PostComment = {
-  id: string
-  post_id: string
-  user_id: string
-  parent_id: string | null
-  text: string
-  hidden: boolean
-  created_at: string
-}
-
-export type PostLike = {
-  id: string
-  post_id: string
-  user_id: string
-}
-
-export type Follow = {
-  id: string
-  follower_id: string
-  following_id: string
-}
-
-export type Notification = {
-  id: string
-  to_user_id: string
-  from_user_id: string | null
-  text: string
-  type: string
-  post_id: string | null
-  dog_id: string | null
-  read: boolean
-  created_at: string
-}
-
-export type ChatMessage = {
-  id: string
-  thread: string
-  from_id: string
-  text: string
-  created_at: string
-}
-
-export type Repost = {
-  id: string
-  post_id: string
-  user_id: string
 }
 
 export type Dog = {
