@@ -27,3 +27,6 @@ dist-ssr
 
 # Android release signing key (back this up, never commit)
 keystore/
+
+# Built APKs for sharing (published as GitHub releases, not committed)
+release/
