@@ -7,6 +7,17 @@ import { ADD_STATUSES, AGES, SEXES, SIZES } from '../types'
 import { DogPeek } from '../components/DogPeek'
 import { useAuth } from '../context/AuthContext'
 import { Modal } from '../components/Modal'
+import { ClipboardList, HandCoins, HeartHandshake, Inbox, PawPrint, Stethoscope, Syringe, Tag, UserCheck, UserX, X } from 'lucide-react'
+
+function Kpi({ icon, n, l, tone }: { icon: ReactNode; n: ReactNode; l: string; tone?: 'warn' | 'muted' }) {
+  return (
+    <div className={'kpi' + (tone ? ' ' + tone : '')}>
+      <span className="kpi-icon">{icon}</span>
+      <div className="n">{n}</div>
+      <div className="l">{l}</div>
+    </div>
+  )
+}
 
 export function DashboardPage() {
   const [dogs, setDogs] = useState<Dog[]>([])
@@ -37,15 +48,16 @@ export function DashboardPage() {
   return (
     <div>
       <h1 className="page-h1">Dashboard</h1>
+      <p className="page-sub">A quick look at the shelter today.</p>
       <div className="kpi-grid">
-        <div className="kpi"><div className="n">{care.length}</div><div className="l">Dogs currently in care</div></div>
-        <div className="kpi"><div className="n">{available}</div><div className="l">Available for adoption</div></div>
-        <div className="kpi"><div className="n">{pendingApps}</div><div className="l">Pending adoption applications</div></div>
-        <div className="kpi"><div className="n">{treatment}</div><div className="l">Dogs under treatment</div></div>
-        <div className="kpi"><div className="n">{adopted}</div><div className="l">Successfully adopted</div></div>
-        <div className="kpi"><div className="n">{deceased}</div><div className="l">Mortality records</div></div>
-        <div className="kpi"><div className="n">{peso(donated)}</div><div className="l">Donations received</div></div>
-        <div className="kpi"><div className="n">{unread}</div><div className="l">Unread inbox</div></div>
+        <Kpi icon={<PawPrint size={18} />} n={care.length} l="Dogs in care" />
+        <Kpi icon={<Tag size={18} />} n={available} l="Available for adoption" />
+        <Kpi icon={<ClipboardList size={18} />} n={pendingApps} l="Pending applications" tone="warn" />
+        <Kpi icon={<Syringe size={18} />} n={treatment} l="Under treatment" />
+        <Kpi icon={<HeartHandshake size={18} />} n={adopted} l="Adopted" />
+        <Kpi icon={<Stethoscope size={18} />} n={deceased} l="Mortality records" tone="muted" />
+        <Kpi icon={<HandCoins size={18} />} n={peso(donated)} l="Donations received" />
+        <Kpi icon={<Inbox size={18} />} n={unread} l="Unread messages" tone="warn" />
       </div>
       <div className="dash-grid">
         <div className="panel">
@@ -378,7 +390,7 @@ export function AdoptionsPage() {
       {table(rejected, false, 'No rejected applications.')}
       {peek ? (
         <Modal onClose={() => setPeek(null)}>
-          <div className="create-head"><b>Adoption application</b><button className="chat-x" type="button" onClick={() => setPeek(null)}>×</button></div>
+          <div className="create-head"><b>Adoption application</b><button className="chat-x" type="button" onClick={() => setPeek(null)} aria-label="Close"><X size={18} /></button></div>
           <div className="adopt-card-body">
             <div className="adopt-review">
               <div><span>Applicant</span><b>{peek.applicant}</b></div>
@@ -452,20 +464,66 @@ export function InboxPage() {
 }
 
 export function StaffAdminPage() {
-  const { isAdmin } = useAuth()
-  const [list, setList] = useState<Profile[]>([])
-  useEffect(() => {
-    supabase.from('profiles').select('*').in('role', ['staff', 'admin']).then(({ data }) => setList((data as Profile[]) || []))
-  }, [])
-  if (!isAdmin) return <p>Admin only.</p>
+  const { isAdmin, profile } = useAuth()
+  const [team, setTeam] = useState<Profile[]>([])
+  const [apps, setApps] = useState<Profile[]>([])
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState('')
+
+  async function load() {
+    const [{ data: t }, { data: a }] = await Promise.all([
+      supabase.from('profiles').select('*').eq('status', 'active').in('role', ['staff', 'admin', 'volunteer']).order('display_name'),
+      supabase.rpc('staff_applications'),
+    ])
+    setTeam((t as Profile[]) || [])
+    setApps((a as Profile[]) || [])
+  }
+  useEffect(() => { if (isAdmin) load() }, [isAdmin])
+
+  async function decide(id: string, approve: boolean) {
+    setBusy(id)
+    setError('')
+    const { error: err } = await supabase.rpc('decide_staff_application', { p_id: id, p_approve: approve })
+    setBusy(null)
+    if (err) { setError(err.message); return }
+    load()
+  }
+
+  if (!isAdmin) return <p className="empty">Only administrators can manage staff.</p>
   return (
     <div>
       <h1 className="page-h1">Staff & Volunteers</h1>
-      <p className="page-sub">Create the account in Supabase Authentication, then promote it with supabase/promote-staff.sql.</p>
-      {list.map((u) => (
-        <div className="panel" key={u.id} style={{ marginBottom: 8 }}>
-          <b>{u.display_name}</b>
-          <div className="muted">{u.email} · {u.role}{u.status !== 'active' ? ` · ${u.status}` : ''}</div>
+      <p className="page-sub">Review staff applications and see who has access to the staff desk.</p>
+      {error ? <p className="err">{error}</p> : null}
+
+      <h2 className="table-h">Pending applications {apps.length ? <span className="nav-badge">{apps.length}</span> : null}</h2>
+      {apps.length ? apps.map((u) => (
+        <div className="panel person" key={u.id}>
+          <span className="person-avatar">{u.display_name.slice(0, 1).toUpperCase()}</span>
+          <div className="person-info">
+            <b>{u.display_name}</b>
+            <div className="muted">@{u.username} · {u.email} · applied {ago(u.created_at)}</div>
+          </div>
+          <div className="inline">
+            <button className="btn btn-primary btn-sm" type="button" disabled={busy === u.id} onClick={() => decide(u.id, true)}>
+              <UserCheck size={15} /> Approve
+            </button>
+            <button className="btn btn-remove btn-sm" type="button" disabled={busy === u.id} onClick={() => decide(u.id, false)}>
+              <UserX size={15} /> Reject
+            </button>
+          </div>
+        </div>
+      )) : <p className="empty">No applications waiting. People apply from the staff sign-in page.</p>}
+
+      <h2 className="table-h">Active team</h2>
+      {team.map((u) => (
+        <div className="panel person" key={u.id}>
+          <span className="person-avatar">{u.display_name.slice(0, 1).toUpperCase()}</span>
+          <div className="person-info">
+            <b>{u.display_name}{u.id === profile?.id ? ' (you)' : ''}</b>
+            <div className="muted">@{u.username} · {u.email}</div>
+          </div>
+          <span className={`status ${u.role === 'admin' ? 'pending' : 'active'}`}>{u.role === 'admin' ? 'Administrator' : u.role === 'volunteer' ? 'Volunteer' : 'Staff'}</span>
         </div>
       ))}
     </div>

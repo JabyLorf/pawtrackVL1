@@ -55,7 +55,7 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  create type public.message_kind as enum ('contact', 'adoption', 'donation');
+  create type public.message_kind as enum ('contact', 'adoption', 'donation', 'staff');
 exception when duplicate_object then null; end $$;
 
 -- -----------------------------------------------------------------------------
@@ -193,8 +193,8 @@ create table if not exists public.activity_log (
 
 -- -----------------------------------------------------------------------------
 -- Auth → profile
--- There is no public sign-up. Every new login starts as pending staff and has
--- no access until an admin activates it (see promote-staff.sql).
+-- Every new login (staff application or dashboard-created user) starts as
+-- pending staff with no access until an admin approves it.
 -- -----------------------------------------------------------------------------
 create or replace function public.handle_new_user()
 returns trigger
@@ -203,14 +203,21 @@ security definer
 set search_path = public
 as $$
 declare
+  base text;
   uname text;
+  n int := 1;
 begin
-  uname := coalesce(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1));
+  base := coalesce(nullif(trim(new.raw_user_meta_data->>'username'), ''), split_part(new.email, '@', 1));
+  uname := base;
+  while exists (select 1 from public.profiles where lower(username) = lower(uname)) loop
+    n := n + 1;
+    uname := base || n::text;
+  end loop;
   insert into public.profiles (id, username, display_name, email, role, status)
   values (
     new.id,
     uname,
-    coalesce(new.raw_user_meta_data->>'display_name', uname),
+    coalesce(nullif(trim(new.raw_user_meta_data->>'display_name'), ''), uname),
     new.email,
     'staff',
     'pending'
@@ -255,6 +262,100 @@ as $$
       and role = 'admin'
       and status = 'active'
   );
+$$;
+
+-- -----------------------------------------------------------------------------
+-- Staff applications
+-- Applicants sign up on /staff-apply, verify their email with a 6-digit code
+-- and wait as pending staff until an admin approves them on the Staff page.
+-- -----------------------------------------------------------------------------
+create or replace function public.username_available(p_username text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select not exists (
+    select 1 from public.profiles where lower(username) = lower(trim(p_username))
+  );
+$$;
+
+create or replace function public.on_auth_user_confirmed()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  p public.profiles%rowtype;
+begin
+  select * into p from public.profiles where id = new.id;
+  if p.id is not null and p.status = 'pending' then
+    insert into public.inbox_messages (name, email, subject, body, kind)
+    values (
+      p.display_name,
+      coalesce(p.email, ''),
+      'Staff application: ' || p.display_name,
+      p.display_name || ' (@' || p.username || ') applied for a staff account. Approve or reject it on the Staff page.',
+      'staff'
+    );
+    insert into public.activity_log (text)
+    values ('Staff application from ' || p.display_name);
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_confirmed on auth.users;
+create trigger on_auth_user_confirmed
+after update of email_confirmed_at on auth.users
+for each row
+when (old.email_confirmed_at is null and new.email_confirmed_at is not null)
+execute function public.on_auth_user_confirmed();
+
+-- Applications an admin can act on: pending accounts with a verified email.
+create or replace function public.staff_applications()
+returns setof public.profiles
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p.*
+  from public.profiles p
+  join auth.users u on u.id = p.id
+  where public.is_admin()
+    and p.status = 'pending'
+    and u.email_confirmed_at is not null
+  order by p.created_at;
+$$;
+
+create or replace function public.decide_staff_application(p_id uuid, p_approve boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  p public.profiles%rowtype;
+begin
+  if not public.is_admin() then
+    raise exception 'Not allowed';
+  end if;
+  if p_id = auth.uid() then
+    raise exception 'You cannot change your own account';
+  end if;
+  select * into p from public.profiles where id = p_id;
+  if p.id is null then
+    raise exception 'Application not found';
+  end if;
+  update public.profiles
+    set status = case when p_approve then 'active' else 'suspended' end::public.account_status
+    where id = p_id;
+  insert into public.activity_log (text)
+  values (case when p_approve then 'Staff approved: ' else 'Staff rejected: ' end || p.display_name);
+end;
 $$;
 
 -- -----------------------------------------------------------------------------
@@ -384,9 +485,10 @@ alter table public.inbox_messages enable row level security;
 alter table public.activity_log enable row level security;
 
 -- Profiles
-drop policy if exists "profiles are readable" on public.profiles;
-create policy "profiles are readable" on public.profiles
-  for select using (true);
+-- Profiles hold emails, so only the owner and active staff can read them.
+drop policy if exists "own or staff read profiles" on public.profiles;
+create policy "own or staff read profiles" on public.profiles
+  for select using (id = auth.uid() or public.is_staff());
 
 drop policy if exists "users update own profile" on public.profiles;
 create policy "users update own profile" on public.profiles
@@ -481,3 +583,8 @@ grant execute on function public.approve_adoption(uuid) to authenticated;
 grant execute on function public.reject_adoption(uuid) to authenticated;
 grant execute on function public.is_staff() to anon, authenticated;
 grant execute on function public.is_admin() to anon, authenticated;
+revoke execute on function public.staff_applications() from public, anon;
+revoke execute on function public.decide_staff_application(uuid, boolean) from public, anon;
+grant execute on function public.staff_applications() to authenticated;
+grant execute on function public.decide_staff_application(uuid, boolean) to authenticated;
+grant execute on function public.username_available(text) to anon, authenticated;

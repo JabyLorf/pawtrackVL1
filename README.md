@@ -8,11 +8,14 @@ This folder is the native React remake of the vanilla PawTrack app. The original
 2. Go to **SQL Editor**.
 3. Paste and run `supabase/schema.sql` (tables, roles, RLS, storage buckets, triggers).
 4. Paste and run `supabase/seed.sql` (demo dogs and donations).
-5. In **Authentication → Providers**, turn on **Email**, and turn off **Allow new users to sign up**. There is no public sign-up; only staff and admins log in.
+5. Staff apply for an account on `/staff-apply` and verify their email with a code, so in **Authentication**:
+   - **Sign In / Providers:** keep **Allow new users to sign up** and **Confirm email** turned on.
+   - **Email Templates → Confirm signup:** put the code in the email, for example `Your PawTrack verification code is {{ .Token }}`.
+   - **SMTP Settings:** Supabase's built-in email only reaches members of your Supabase team and sends very few emails per hour. Set up a free SMTP provider (for example Resend or Brevo) so applicants actually receive their code.
 6. In **Authentication → Users**, create (tick **Auto Confirm User**):
    - `admin@pawtrack.app` / a password you choose
    - `staff@pawtrack.app` / a password you choose
-7. New logins start as pending staff with no access. Run this in the SQL Editor (also in `supabase/promote-staff.sql`):
+7. New logins start as pending staff with no access. Applicants are approved by an admin on the **Staff & Volunteers** page. For the very first admin, run this in the SQL Editor (also in `supabase/promote-staff.sql`):
 
 ```sql
 update public.profiles
@@ -39,7 +42,7 @@ Storage buckets: `dog-photos` (public), `id-photos` (private, staff can read).
 
 **Upgrading an existing database?** If you set up Supabase with an older version that had the Community feature, also run `supabase/remove-community.sql` to drop the community tables. It permanently deletes posts, comments, likes, follows and chats.
 
-If that older database still had client sign-up, also run `supabase/remove-clients.sql`. Client accounts become pending staff with no access, and the client links on dogs and adoptions are dropped.
+If that older database still had client sign-up, also run `supabase/remove-clients.sql`. Then run `supabase/staff-applications.sql` to add staff applications and admin approval. Client accounts become pending staff with no access, and the client links on dogs and adoptions are dropped.
 
 ## 2. Run the React app
 
@@ -60,3 +63,27 @@ Open the URL Vite prints (usually http://localhost:5173).
 - Public site: Home, Adopt, Donate, About, Contact (no account needed to apply or donate)
 - Staff desk: `/ops` after staff/admin login
 - Adoption form still requires telephone, valid ID photo, and a note naming who wants to adopt
+
+## 3. Build the Android app (APK)
+
+The Android app is the same React site wrapped with [Capacitor](https://capacitorjs.com) 7. It uses the Supabase project in your `.env`, so build it with the right `.env` in place.
+
+Needs: Node 20+, Java 21 (`/usr/lib/jvm/java-21-openjdk-amd64`) and the Android SDK (`~/Android/Sdk`, comes with Android Studio).
+
+```bash
+npm run build
+npx cap sync android
+cd android
+echo "sdk.dir=$HOME/Android/Sdk" > local.properties
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew assembleRelease
+```
+
+The signed APK is `android/app/build/outputs/apk/release/app-release.apk`.
+
+**Signing key:** release builds are signed with `keystore/pawtrack-release.jks` using the passwords in `keystore/keystore.properties`. Both are git-ignored. Back them up somewhere safe: Android only installs an update over an existing install if it is signed with the same key. Without `keystore/`, `assembleRelease` makes an unsigned APK.
+
+**New version:** raise `versionCode` (and `versionName`) in `android/app/build.gradle` before building.
+
+**Publishing:** upload the APK to a GitHub release as `PawTrack.apk`. The website's "Download the Android app" button points at `releases/latest/download/PawTrack.apk`, so it always serves the newest release. Set `VITE_APK_URL` in `.env` to host it somewhere else.
+
+**Icons:** edit the SVGs in `assets/`, export them to the PNGs next to them, then run `npx @capacitor/assets generate --android --iconBackgroundColor '#0f766e' --splashBackgroundColor '#0f766e'`.

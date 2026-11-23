@@ -1,9 +1,10 @@
 import type { Dog } from '../types'
+import { PawPrint } from 'lucide-react'
 
 export function DogPhoto({ dog, className }: { dog: Pick<Dog, 'name' | 'photo_url'>; className: string }) {
   return (
     <div className={className}>
-      {dog.photo_url ? <img src={dog.photo_url} alt={dog.name} /> : <span>🐾</span>}
+      {dog.photo_url ? <img src={dog.photo_url} alt={dog.name} /> : <PawPrint size={40} strokeWidth={1.5} />}
     </div>
   )
 }

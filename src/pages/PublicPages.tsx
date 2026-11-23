@@ -6,6 +6,8 @@ import { DogCard } from '../components/DogCard'
 import { DogPeek } from '../components/DogPeek'
 import { AdoptBrowse } from '../components/AdoptBrowse'
 import { PublicLayout } from '../components/PublicLayout'
+import { APK_URL, isNativeApp } from '../lib/app'
+import { Download } from 'lucide-react'
 
 export function HomePage() {
   const [dogs, setDogs] = useState<Dog[]>([])
@@ -22,14 +24,12 @@ export function HomePage() {
           <span className="kicker" style={{ color: '#fde68a' }}>Non-profit animal rescue · Ormoc City</span>
           <h1>Their second chance starts with you</h1>
           <p className="tagline">Rescue Love. Adopt Hope. Don't Shop. We rescue, rehabilitate, and rehome abandoned, neglected, and abused dogs at the Ormoc City Dog Pound in Brgy. Cagbuhangin.</p>
-        </div>
-      </section>
-      <section className="pub-stats">
-        <div className="container">
-          <div><div className="n">120+</div><div className="l">Dogs rescued</div></div>
-          <div><div className="n">80+</div><div className="l">Happy adoptions</div></div>
-          <div><div className="n">25</div><div className="l">Active volunteers</div></div>
-          <div><div className="n">365</div><div className="l">Days open</div></div>
+          {!isNativeApp ? (
+            <div className="app-cta">
+              <a className="btn btn-accent" href={APK_URL} download><Download size={18} /> Download the Android app</a>
+              <small>Free · Android 6.0 or newer · about 5 MB</small>
+            </div>
+          ) : null}
         </div>
       </section>
       <section className="block" id="adopt">

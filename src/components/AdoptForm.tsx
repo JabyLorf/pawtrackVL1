@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { Dog } from '../types'
 import { Modal } from './Modal'
@@ -73,7 +74,7 @@ export function AdoptForm({ dog, onClose }: { dog: Dog; onClose: () => void }) {
     <Modal onClose={onClose}>
       <div className="create-head">
         <b>{step === 'done' ? 'Application submitted' : `Adopt ${dog.name}`}</b>
-        <button className="chat-x" type="button" onClick={onClose}>×</button>
+        <button className="chat-x" type="button" onClick={onClose} aria-label="Close"><X size={18} /></button>
       </div>
       <div className="adopt-card-body">
         {step === 'form' ? (
