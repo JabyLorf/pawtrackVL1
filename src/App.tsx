@@ -4,7 +4,7 @@ import { DeviceProvider } from './context/DeviceContext'
 import { OpsLayout } from './components/OpsLayout'
 import { AdoptPage, HomePage } from './pages/PublicPages'
 import { AboutPage, ContactPage, DonatePage } from './pages/SitePages'
-import { LoginPage, SignupPage, StaffLoginPage } from './pages/AuthPages'
+import { StaffLoginPage } from './pages/AuthPages'
 import {
   AdoptedPage,
   AdoptionsPage,
@@ -28,8 +28,7 @@ export default function App() {
             <Route path="/donate" element={<DonatePage />} />
             <Route path="/about" element={<AboutPage />} />
             <Route path="/contact" element={<ContactPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/signup" element={<SignupPage />} />
+            <Route path="/login" element={<Navigate to="/staff-login" replace />} />
             <Route path="/staff-login" element={<StaffLoginPage />} />
             <Route path="/ops" element={<OpsLayout />}>
               <Route index element={<DashboardPage />} />

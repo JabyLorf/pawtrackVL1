@@ -34,7 +34,7 @@ export function AdoptBrowse({ compact }: { compact?: boolean }) {
 
   return (
     <>
-      <div className={compact ? 'client-adopt' : undefined}>
+      <div className={compact ? 'compact-adopt' : undefined}>
         <div className="adopt-tools">
           <input className="staff-search" placeholder="Search by name, age, color, or sex" value={q} onChange={(e) => setQ(e.target.value)} />
           <div className="filters">

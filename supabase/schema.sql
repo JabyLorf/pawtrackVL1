@@ -11,7 +11,7 @@ create extension if not exists "pgcrypto";
 -- Enums
 -- -----------------------------------------------------------------------------
 do $$ begin
-  create type public.user_role as enum ('client', 'staff', 'admin', 'volunteer');
+  create type public.user_role as enum ('staff', 'admin', 'volunteer');
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -66,8 +66,8 @@ create table if not exists public.profiles (
   username text unique not null,
   display_name text not null,
   email text,
-  role public.user_role not null default 'client',
-  status public.account_status not null default 'active',
+  role public.user_role not null default 'staff',
+  status public.account_status not null default 'pending',
   created_at timestamptz not null default now()
 );
 
@@ -97,7 +97,6 @@ create table if not exists public.dogs (
   story text not null default '',
   photo_url text not null default '',
   visible boolean not null default true,
-  owner_id uuid references public.profiles (id) on delete set null,
   mother_id uuid references public.dogs (id) on delete set null,
   intake_at timestamptz not null default now(),
   died_at timestamptz,
@@ -107,7 +106,6 @@ create table if not exists public.dogs (
 
 create index if not exists dogs_status_idx on public.dogs (status);
 create index if not exists dogs_mother_idx on public.dogs (mother_id);
-create index if not exists dogs_owner_idx on public.dogs (owner_id);
 create index if not exists dogs_search_idx on public.dogs (name, age, color, sex);
 
 create or replace function public.dogs_set_oso_id()
@@ -134,7 +132,6 @@ for each row execute function public.dogs_set_oso_id();
 create table if not exists public.adoptions (
   id uuid primary key default gen_random_uuid(),
   dog_id uuid not null references public.dogs (id) on delete cascade,
-  user_id uuid references public.profiles (id) on delete set null,
   applicant text not null,
   email text not null default '',
   phone text not null,
@@ -196,6 +193,8 @@ create table if not exists public.activity_log (
 
 -- -----------------------------------------------------------------------------
 -- Auth → profile
+-- There is no public sign-up. Every new login starts as pending staff and has
+-- no access until an admin activates it (see promote-staff.sql).
 -- -----------------------------------------------------------------------------
 create or replace function public.handle_new_user()
 returns trigger
@@ -213,8 +212,8 @@ begin
     uname,
     coalesce(new.raw_user_meta_data->>'display_name', uname),
     new.email,
-    'client',
-    'active'
+    'staff',
+    'pending'
   );
   return new;
 end;
@@ -345,7 +344,7 @@ begin
     set status = 'approved', decided_at = now()
     where id = p_id;
   update public.dogs
-    set status = 'Adopted', owner_id = rec.user_id
+    set status = 'Adopted'
     where id = rec.dog_id;
   insert into public.activity_log (text)
   values ('Adoption approved');
@@ -407,14 +406,14 @@ drop policy if exists "staff manage dogs" on public.dogs;
 create policy "staff manage dogs" on public.dogs
   for all using (public.is_staff()) with check (public.is_staff());
 
--- Adoptions: anyone can apply; staff manage; users see own
+-- Adoptions: anyone can apply; staff read and manage
 drop policy if exists "anyone apply adopt" on public.adoptions;
 create policy "anyone apply adopt" on public.adoptions
   for insert with check (true);
 
-drop policy if exists "own adoptions readable" on public.adoptions;
-create policy "own adoptions readable" on public.adoptions
-  for select using (user_id = auth.uid() or public.is_staff());
+drop policy if exists "staff read adoptions" on public.adoptions;
+create policy "staff read adoptions" on public.adoptions
+  for select using (public.is_staff());
 
 drop policy if exists "staff manage adoptions" on public.adoptions;
 create policy "staff manage adoptions" on public.adoptions

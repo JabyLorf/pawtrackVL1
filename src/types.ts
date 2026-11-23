@@ -1,4 +1,4 @@
-export type UserRole = 'client' | 'staff' | 'admin' | 'volunteer'
+export type UserRole = 'staff' | 'admin' | 'volunteer'
 export type AccountStatus = 'active' | 'pending' | 'suspended'
 export type DogSex = 'Female' | 'Male'
 export type DogAge = 'Puppy' | 'Young Adult' | 'Adult' | 'Senior'
@@ -41,7 +41,6 @@ export type Dog = {
   story: string
   photo_url: string
   visible: boolean
-  owner_id: string | null
   mother_id: string | null
   intake_at: string
   died_at: string | null
@@ -50,7 +49,6 @@ export type Dog = {
 export type Adoption = {
   id: string
   dog_id: string
-  user_id: string | null
   applicant: string
   email: string
   phone: string

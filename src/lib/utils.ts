@@ -1,15 +1,5 @@
 import type { Dog, DogStatus } from '../types'
 
-export function passwordErrors(password: string) {
-  const issues: string[] = []
-  if (password.length < 8) issues.push('at least 8 characters')
-  if (!/[A-Z]/.test(password)) issues.push('an uppercase letter')
-  if (!/[a-z]/.test(password)) issues.push('a lowercase letter')
-  if (!/\d/.test(password)) issues.push('a number')
-  if (!/[^A-Za-z0-9]/.test(password)) issues.push('a special character')
-  return issues
-}
-
 export function peso(amount: number) {
   return `₱${Number(amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
