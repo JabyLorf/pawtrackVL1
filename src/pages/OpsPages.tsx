@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { ago, dogMatches, inCare, peso, statusClass } from '../lib/utils'
@@ -9,7 +9,7 @@ import { DogPhoto } from '../components/DogCard'
 import { useDevice } from '../context/DeviceContext'
 import { useAuth } from '../context/AuthContext'
 import { Modal } from '../components/Modal'
-import { ClipboardList, HandCoins, HeartHandshake, Inbox, PawPrint, Stethoscope, Syringe, Tag, UserCheck, UserX, X } from 'lucide-react'
+import { ClipboardList, HandCoins, HeartHandshake, Inbox, PawPrint, Stethoscope, Syringe, Tag, UserCheck, UserX, X, Reply, Users, Check, Loader2, Send } from 'lucide-react'
 
 function Kpi({ icon, n, l, tone }: { icon: ReactNode; n: ReactNode; l: string; tone?: 'warn' | 'muted' }) {
   return (
@@ -240,6 +240,10 @@ export function DogEditPage() {
   const [error, setError] = useState('')
   const [pups, setPups] = useState<Dog[]>([])
   const [pupName, setPupName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [addingPup, setAddingPup] = useState(false)
+  // A ref blocks a second tap before React re-renders the disabled button.
+  const busy = useRef(false)
 
   useEffect(() => {
     if (isNew) return
@@ -251,7 +255,20 @@ export function DogEditPage() {
 
   async function save(e: FormEvent) {
     e.preventDefault()
-    if (!dog.name) { setError('Name is required.'); return }
+    if (busy.current) return
+    if (!dog.name?.trim()) { setError('Name is required.'); return }
+    busy.current = true
+    setSaving(true)
+    setError('')
+    try {
+      await saveDog()
+    } finally {
+      busy.current = false
+      setSaving(false)
+    }
+  }
+
+  async function saveDog() {
     let photo_url = dog.photo_url || ''
     if (file) {
       const path = `${crypto.randomUUID()}-${file.name.replace(/\s+/g, '-')}`
@@ -260,7 +277,7 @@ export function DogEditPage() {
       photo_url = supabase.storage.from('dog-photos').getPublicUrl(path).data.publicUrl
     }
     const payload = {
-      name: dog.name,
+      name: dog.name!.trim(),
       sex: dog.sex,
       age: dog.age,
       breed: dog.breed || 'Aspin',
@@ -288,7 +305,9 @@ export function DogEditPage() {
 
   async function addPuppy(e: FormEvent) {
     e.preventDefault()
-    if (!id || isNew || !pupName) return
+    if (!id || isNew || !pupName.trim() || busy.current) return
+    busy.current = true
+    setAddingPup(true)
     await supabase.from('dogs').insert({
       name: pupName, sex: 'Female', age: 'Puppy', breed: dog.breed || 'Aspin', size: 'Small',
       status: 'Available', mother_id: id, story: `${pupName} is a puppy of ${dog.name}.`,
@@ -296,6 +315,8 @@ export function DogEditPage() {
     setPupName('')
     const { data } = await supabase.from('dogs').select('*').eq('mother_id', id)
     setPups((data as Dog[]) || [])
+    busy.current = false
+    setAddingPup(false)
   }
 
   const locked = dog.status === 'Adopted' || dog.status === 'Deceased'
@@ -305,7 +326,8 @@ export function DogEditPage() {
     <div>
       <button className="link" type="button" onClick={() => navigate(-1)}>← Back</button>
       <h1 className="page-h1">{isNew ? 'Add a dog' : `Edit ${dog.name || 'dog'}`}</h1>
-      <form className="admin-form" onSubmit={save}>
+      <form className="admin-form" onSubmit={save} aria-busy={saving}>
+        <fieldset className="plain" disabled={saving}>
         {dog.photo_url ? <img src={dog.photo_url} alt="" style={{ width: 160, aspectRatio: '1', objectFit: 'cover', borderRadius: 12 }} /> : null}
         <label>Photo</label>
         <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
@@ -334,16 +356,19 @@ export function DogEditPage() {
           <label className="check"><input type="checkbox" checked={!!dog.dewormed} onChange={(e) => setDog({ ...dog, dewormed: e.target.checked })} /> Dewormed</label>
           <label className="check"><input type="checkbox" checked={!!dog.spayed} onChange={(e) => setDog({ ...dog, spayed: e.target.checked })} /> Spayed / Neutered</label>
         </fieldset>
+        </fieldset>
         {error ? <p className="err">{error}</p> : null}
-        <button className="btn btn-coral btn-block" type="submit">Save</button>
+        <button className="btn btn-primary btn-block" type="submit" disabled={saving}>
+          {saving ? <><Loader2 size={17} className="spin" /> {file ? 'Uploading photo and saving…' : 'Saving…'}</> : isNew ? 'Add dog' : 'Save changes'}
+        </button>
       </form>
       {!isNew && femaleAdult ? (
         <div className="panel" style={{ marginTop: 16, maxWidth: 720 }}>
           <h3>Her puppies</h3>
           {pups.map((p) => <p key={p.id}><Link to={`/ops/dogs/${p.id}`}>{p.name}</Link> · {p.status}</p>)}
           <form onSubmit={addPuppy} className="row wrap" style={{ marginTop: 10 }}>
-            <input placeholder="Puppy name" value={pupName} onChange={(e) => setPupName(e.target.value)} />
-            <button className="btn btn-coral" type="submit">Add puppy</button>
+            <input placeholder="Puppy name" value={pupName} onChange={(e) => setPupName(e.target.value)} disabled={addingPup} />
+            <button className="btn btn-primary" type="submit" disabled={addingPup}>{addingPup ? <><Loader2 size={16} className="spin" /> Adding…</> : 'Add puppy'}</button>
           </form>
         </div>
       ) : null}
@@ -522,11 +547,117 @@ export function DonationsPage() {
   )
 }
 
+const KIND_LABEL: Record<string, string> = { contact: 'Message', adoption: 'Adoption', donation: 'Donation', staff: 'Staff application' }
+const KIND_CLASS: Record<string, string> = { contact: 'adopted', adoption: 'pending', donation: 'active', staff: 'pending' }
+
+type InboxReply = { id: string; message_id: string; body: string; sent_by_name: string; created_at: string }
+
+const canEmail = (email: string) => /^[^\s@]+@[^\s@]+$/.test((email || '').trim())
+
+function MessageCard({ m, replies, onRead, onReplied }: {
+  m: InboxMessage
+  replies: InboxReply[]
+  onRead: (id: string) => void
+  onReplied: (r: InboxReply) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+  const [sent, setSent] = useState(false)
+  const busy = useRef(false)
+
+  async function send(e: FormEvent) {
+    e.preventDefault()
+    if (busy.current || !text.trim()) return
+    busy.current = true
+    setSending(true)
+    setError('')
+    const { data, error: err } = await supabase.functions.invoke('notify-admin', {
+      body: { action: 'reply', message_id: m.id, body: text.trim() },
+    })
+    busy.current = false
+    setSending(false)
+    if (err || data?.error) {
+      let msg = data?.error as string | undefined
+      if (!msg && err && 'context' in err) {
+        try { msg = (await (err as { context: Response }).context.json()).error } catch { /* ignore */ }
+      }
+      setError(msg || 'The reply could not be sent. Please try again.')
+      return
+    }
+    if (data?.reply) onReplied(data.reply as InboxReply)
+    setText('')
+    setOpen(false)
+    setSent(true)
+  }
+
+  return (
+    <div className={'panel msg' + (m.read ? '' : ' unread')}>
+      <div className="msg-head">
+        <span className={`status ${KIND_CLASS[m.kind] || 'adopted'}`}>{KIND_LABEL[m.kind] || m.kind}</span>
+        {!m.read ? <span className="msg-new">New</span> : null}
+        {replies.length ? <span className="msg-replied"><Check size={12} /> Replied</span> : null}
+        <span className="msg-time">{ago(m.created_at)}</span>
+      </div>
+      <b className="msg-subject">{m.subject}</b>
+      <div className="muted msg-from">{m.name}{m.email ? ` · ${m.email}` : ' · no email given'}</div>
+      <p className="msg-body">{m.body}</p>
+
+      {replies.map((r) => (
+        <div className="msg-reply" key={r.id}>
+          <div className="msg-reply-head"><Reply size={13} /> {r.sent_by_name || 'Staff'} replied · {ago(r.created_at)}</div>
+          <p>{r.body}</p>
+        </div>
+      ))}
+
+      {open ? (
+        <form className="msg-compose" onSubmit={send}>
+          <label className="sr-only" htmlFor={`reply-${m.id}`}>Reply to {m.name}</label>
+          <textarea
+            id={`reply-${m.id}`}
+            rows={4}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={`Write your reply to ${m.name}…`}
+            disabled={sending}
+            autoFocus
+          />
+          <div className="muted msg-to">Sends from the PawTrack email to {m.email}</div>
+          {error ? <p className="err">{error}</p> : null}
+          <div className="inline">
+            <button className="btn btn-primary btn-sm" type="submit" disabled={sending || !text.trim()}>
+              {sending ? <><Loader2 size={15} className="spin" /> Sending…</> : <><Send size={15} /> Send reply</>}
+            </button>
+            <button className="btn btn-ghost" type="button" disabled={sending} onClick={() => { setOpen(false); setError('') }}>Cancel</button>
+          </div>
+        </form>
+      ) : (
+        <div className="inline">
+          {canEmail(m.email) ? (
+            <button className="btn btn-primary btn-sm" type="button" onClick={() => { setOpen(true); setSent(false) }}>
+              <Reply size={15} /> Reply
+            </button>
+          ) : null}
+          {m.kind === 'staff' ? <Link className="btn btn-light btn-sm" to="/ops/staff"><Users size={15} /> Review application</Link> : null}
+          {!m.read ? <button className="btn btn-ghost" type="button" onClick={() => onRead(m.id)}><Check size={14} /> Mark read</button> : null}
+          {sent ? <span className="msg-sent"><Check size={14} /> Reply sent</span> : null}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function InboxPage() {
   const [rows, setRows] = useState<InboxMessage[]>([])
+  const [replies, setReplies] = useState<InboxReply[]>([])
   async function load() {
-    const { data } = await supabase.from('inbox_messages').select('*').order('created_at', { ascending: false })
+    const [{ data }, { data: r }] = await Promise.all([
+      supabase.from('inbox_messages').select('*').order('created_at', { ascending: false }),
+      supabase.from('inbox_replies').select('*').order('created_at'),
+    ])
     setRows((data as InboxMessage[]) || [])
+    setReplies((r as InboxReply[]) || [])
   }
   useEffect(() => { load() }, [])
   async function read(id: string) {
@@ -536,21 +667,19 @@ export function InboxPage() {
   return (
     <div>
       <h1 className="page-h1">Inbox</h1>
-      <p className="page-sub">Shared inbox for admin and staff. Adoption applications and donations show up here.</p>
-      {rows.map((m) => (
-        <div className="panel" key={m.id} style={{ marginBottom: 10 }}>
-          <div className="row" style={{ justifyContent: 'space-between' }}>
-            <div>
-              <b>{m.subject}</b>{' '}
-              <span className={`status ${m.kind === 'adoption' ? 'pending' : m.kind === 'donation' ? 'active' : 'adopted'}`}>{m.kind}</span>
-              {!m.read ? <span className="status pending"> New</span> : null}
-              <div className="muted">{m.name} · {m.email} · {ago(m.created_at)}</div>
-            </div>
-            {!m.read ? <button className="btn btn-ghost" type="button" onClick={() => read(m.id)}>Mark read</button> : null}
-          </div>
-          <p style={{ marginTop: 10 }}>{m.body}</p>
-        </div>
-      ))}
+      <p className="page-sub">Messages, adoption applications, donations and staff applications. Each one is also emailed to the admin.</p>
+      {rows.length ? rows.map((m) => (
+        <MessageCard
+          key={m.id}
+          m={m}
+          replies={replies.filter((r) => r.message_id === m.id)}
+          onRead={read}
+          onReplied={(r) => {
+            setReplies((cur) => [...cur, r])
+            setRows((cur) => cur.map((x) => (x.id === m.id ? { ...x, read: true } : x)))
+          }}
+        />
+      )) : <p className="empty panel">No messages yet.</p>}
     </div>
   )
 }

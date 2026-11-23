@@ -177,10 +177,23 @@ create table if not exists public.inbox_messages (
   kind public.message_kind not null default 'contact',
   dog_id uuid references public.dogs (id) on delete set null,
   read boolean not null default false,
+  notified_at timestamptz, -- when the admin was emailed (see email-notifications.sql)
   created_at timestamptz not null default now()
 );
 
 create index if not exists inbox_unread_idx on public.inbox_messages (read, created_at desc);
+
+-- Replies sent from the staff Inbox (written by the notify-admin function).
+create table if not exists public.inbox_replies (
+  id uuid primary key default gen_random_uuid(),
+  message_id uuid not null references public.inbox_messages (id) on delete cascade,
+  body text not null,
+  sent_by uuid references public.profiles (id) on delete set null,
+  sent_by_name text not null default '',
+  created_at timestamptz not null default now()
+);
+
+create index if not exists inbox_replies_message_idx on public.inbox_replies (message_id, created_at);
 
 -- -----------------------------------------------------------------------------
 -- Activity log
@@ -483,6 +496,7 @@ alter table public.adoptions enable row level security;
 alter table public.donations enable row level security;
 alter table public.inbox_messages enable row level security;
 alter table public.activity_log enable row level security;
+alter table public.inbox_replies enable row level security;
 
 -- Profiles
 -- Profiles hold emails, so only the owner and active staff can read them.
@@ -537,6 +551,10 @@ create policy "anyone write inbox" on public.inbox_messages
 
 drop policy if exists "staff read inbox" on public.inbox_messages;
 create policy "staff read inbox" on public.inbox_messages
+  for select using (public.is_staff());
+
+drop policy if exists "staff read replies" on public.inbox_replies;
+create policy "staff read replies" on public.inbox_replies
   for select using (public.is_staff());
 
 drop policy if exists "staff update inbox" on public.inbox_messages;

@@ -27,6 +27,20 @@ update public.profiles
   where email = 'staff@pawtrack.app';
 ```
 
+### Email: notifications and replies
+
+Every new inbox item (contact message, adoption application, donation, staff application) is emailed to the admin with **Reply-To** set to the sender, so replying in Gmail answers them directly. Staff can also press **Reply** on a message in the Inbox: the reply is emailed to the sender from the admin Gmail and saved under the message.
+
+Everything goes through the admin Gmail (`pawtrackoso@gmail.com`), so one **App password** covers it all:
+
+1. In that Google Account, turn on **2-Step Verification**, then create an **App password** (Google Account → Security → App passwords).
+2. Deploy the function: `supabase functions deploy notify-admin --no-verify-jwt` (code in `supabase/functions/notify-admin`).
+3. In **Edge Functions → Secrets**, add `GMAIL_APP_PASSWORD` = the app password. Optional: `ADMIN_EMAIL` (default `pawtrackoso@gmail.com`) and `SITE_URL` (adds an "Open the staff inbox" link).
+4. Run `supabase/email-notifications.sql` after replacing `YOUR-PROJECT-REF` with your project ref.
+5. For the staff sign-up verification codes, set **Authentication → SMTP Settings** to the same Gmail: host `smtp.gmail.com`, port `465`, username = the Gmail address, password = the same app password.
+
+Gmail allows about 500 emails a day, which is plenty for the shelter.
+
 ### Tables created
 
 | Table | Purpose |

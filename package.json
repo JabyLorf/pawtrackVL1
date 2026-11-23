@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@capacitor/android": "^7.6.10",
+    "@capacitor/app": "7.1.2",
     "@capacitor/core": "^7.6.10",
     "@supabase/supabase-js": "^2.109.0",
     "firebase": "^12.18.0",

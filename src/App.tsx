@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { DeviceProvider } from './context/DeviceContext'
 import { OpsLayout } from './components/OpsLayout'
+import { AppBackHandler } from './components/AppBackHandler'
 import { AdoptPage, HomePage } from './pages/PublicPages'
 import { AboutPage, ContactPage, DonatePage } from './pages/SitePages'
 import { StaffApplyPage, StaffLoginPage } from './pages/AuthPages'
@@ -22,6 +23,7 @@ export default function App() {
     <DeviceProvider>
       <AuthProvider>
         <BrowserRouter>
+          <AppBackHandler />
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/adopt" element={<AdoptPage />} />
