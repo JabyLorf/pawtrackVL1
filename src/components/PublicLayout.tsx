@@ -39,17 +39,12 @@ export function PublicLayout({ children }: { children: ReactNode }) {
             <NavLink className={({ isActive }) => 'linkish' + (isActive ? ' on' : '')} to="/donate">Donate</NavLink>
             <NavLink className={({ isActive }) => 'linkish' + (isActive ? ' on' : '')} to="/about">About</NavLink>
             <NavLink className={({ isActive }) => 'linkish' + (isActive ? ' on' : '')} to="/contact">Contact</NavLink>
-            {profile ? (
-              isStaff ? (
-                <NavLink className="btn btn-accent btn-sm btn-pill" to="/ops">Staff desk</NavLink>
-              ) : (
-                <button className="btn btn-accent btn-sm btn-pill" type="button" onClick={() => signOut().then(() => navigate('/'))}>Log out</button>
-              )
+            {isStaff ? (
+              <NavLink className="btn btn-accent btn-sm btn-pill" to="/ops">Staff desk</NavLink>
+            ) : profile ? (
+              <button className="btn btn-accent btn-sm btn-pill" type="button" onClick={() => signOut().then(() => navigate('/'))}>Log out</button>
             ) : (
-              <>
-                <NavLink className="linkish" to="/login">Client Login</NavLink>
-                <NavLink className="btn btn-accent btn-sm btn-pill" to="/staff-login">Staff Login</NavLink>
-              </>
+              <NavLink className="btn btn-accent btn-sm btn-pill" to="/staff-login">Staff Login</NavLink>
             )}
           </nav>
         </div>

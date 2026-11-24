@@ -1,19 +1,17 @@
 import { useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../context/AuthContext'
 import type { Dog } from '../types'
 import { Modal } from './Modal'
 
 export function AdoptForm({ dog, onClose }: { dog: Dog; onClose: () => void }) {
-  const { profile } = useAuth()
   const [step, setStep] = useState<'form' | 'confirm' | 'done'>('form')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [idFile, setIdFile] = useState<File | null>(null)
   const [idPreview, setIdPreview] = useState('')
   const [draft, setDraft] = useState({
-    name: profile?.display_name || '',
-    email: profile?.email || '',
+    name: '',
+    email: '',
     phone: '',
     address: '',
     home: 'House with yard',
@@ -53,7 +51,6 @@ export function AdoptForm({ dog, onClose }: { dog: Dog; onClose: () => void }) {
     }
     const { error: insErr } = await supabase.from('adoptions').insert({
       dog_id: dog.id,
-      user_id: profile?.id || null,
       applicant: draft.name,
       email: draft.email,
       phone: draft.phone,

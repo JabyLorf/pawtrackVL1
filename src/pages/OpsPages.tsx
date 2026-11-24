@@ -118,7 +118,7 @@ export function DogsPage() {
   async function mark(id: string, status: DogStatus) {
     const patch: Partial<Dog> = { status }
     if (status === 'Deceased') patch.died_at = new Date().toISOString()
-    if (status === 'Available') { patch.owner_id = null; patch.died_at = null }
+    if (status === 'Available') patch.died_at = null
     await supabase.from('dogs').update(patch).eq('id', id)
     load()
   }
@@ -151,7 +151,7 @@ export function AdoptedPage() {
     supabase.from('dogs').select('*').eq('status', 'Adopted').then(({ data }) => setDogs((data as Dog[]) || []))
   }, [])
   async function restore(id: string) {
-    await supabase.from('dogs').update({ status: 'Available', owner_id: null }).eq('id', id)
+    await supabase.from('dogs').update({ status: 'Available' }).eq('id', id)
     setDogs((cur) => cur.filter((d) => d.id !== id))
   }
   return (
@@ -465,7 +465,7 @@ export function StaffAdminPage() {
       {list.map((u) => (
         <div className="panel" key={u.id} style={{ marginBottom: 8 }}>
           <b>{u.display_name}</b>
-          <div className="muted">{u.email} · {u.role}</div>
+          <div className="muted">{u.email} · {u.role}{u.status !== 'active' ? ` · ${u.status}` : ''}</div>
         </div>
       ))}
     </div>
