@@ -10,7 +10,7 @@ function SetupMessage() {
       <div className="auth-card">
         <h1>Site not configured</h1>
         <p className="auth-sub">
-          This copy of PawTrack was built without its Supabase settings. Add the build variables
+          This copy of PawTrack was built with missing or invalid Supabase settings. Check the build variables
           <b> VITE_SUPABASE_URL</b> and <b>VITE_SUPABASE_ANON_KEY</b>, then rebuild and deploy.
         </p>
       </div>
