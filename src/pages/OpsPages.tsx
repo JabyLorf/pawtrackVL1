@@ -1,12 +1,26 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { ago, dogMatches, inCare, peso, statusClass } from '../lib/utils'
 import type { Activity, Adoption, Dog, DogStatus, Donation, InboxMessage, Profile } from '../types'
 import { ADD_STATUSES, AGES, SEXES, SIZES } from '../types'
 import { DogPeek } from '../components/DogPeek'
+import { DogPhoto } from '../components/DogCard'
+import { useDevice } from '../context/DeviceContext'
 import { useAuth } from '../context/AuthContext'
 import { Modal } from '../components/Modal'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { ClipboardList, HandCoins, HeartHandshake, Inbox, PawPrint, Stethoscope, Syringe, Tag, UserCheck, UserX, X, Reply, Users, Check, Loader2, Send, Trash2, RotateCcw, Plus, CheckCircle2, Image as ImageIcon } from 'lucide-react'
+
+function Kpi({ icon, n, l, tone }: { icon: ReactNode; n: ReactNode; l: string; tone?: 'warn' | 'muted' }) {
+  return (
+    <div className={'kpi' + (tone ? ' ' + tone : '')}>
+      <span className="kpi-icon">{icon}</span>
+      <div className="n">{n}</div>
+      <div className="l">{l}</div>
+    </div>
+  )
+}
 
 export function DashboardPage() {
   const [dogs, setDogs] = useState<Dog[]>([])
@@ -29,7 +43,7 @@ export function DashboardPage() {
   const adopted = dogs.filter((d) => d.status === 'Adopted').length
   const deceased = dogs.filter((d) => d.status === 'Deceased').length
   const pendingApps = adoptions.filter((a) => a.status === 'pending').length
-  const donated = donations.reduce((s, d) => s + Number(d.amount), 0)
+  const donated = donations.filter((d) => d.status === 'confirmed').reduce((s, d) => s + Number(d.amount), 0)
   const counts: Record<string, number> = {}
   dogs.forEach((d) => { counts[d.status] = (counts[d.status] || 0) + 1 })
   const max = Math.max(1, ...Object.values(counts))
@@ -37,15 +51,16 @@ export function DashboardPage() {
   return (
     <div>
       <h1 className="page-h1">Dashboard</h1>
+      <p className="page-sub">A quick look at the shelter today.</p>
       <div className="kpi-grid">
-        <div className="kpi"><div className="n">{care.length}</div><div className="l">Dogs currently in care</div></div>
-        <div className="kpi"><div className="n">{available}</div><div className="l">Available for adoption</div></div>
-        <div className="kpi"><div className="n">{pendingApps}</div><div className="l">Pending adoption applications</div></div>
-        <div className="kpi"><div className="n">{treatment}</div><div className="l">Dogs under treatment</div></div>
-        <div className="kpi"><div className="n">{adopted}</div><div className="l">Successfully adopted</div></div>
-        <div className="kpi"><div className="n">{deceased}</div><div className="l">Mortality records</div></div>
-        <div className="kpi"><div className="n">{peso(donated)}</div><div className="l">Donations received</div></div>
-        <div className="kpi"><div className="n">{unread}</div><div className="l">Unread inbox</div></div>
+        <Kpi icon={<PawPrint size={18} />} n={care.length} l="Dogs in care" />
+        <Kpi icon={<Tag size={18} />} n={available} l="Available for adoption" />
+        <Kpi icon={<ClipboardList size={18} />} n={pendingApps} l="Pending applications" tone="warn" />
+        <Kpi icon={<Syringe size={18} />} n={treatment} l="Under treatment" />
+        <Kpi icon={<HeartHandshake size={18} />} n={adopted} l="Adopted" />
+        <Kpi icon={<Stethoscope size={18} />} n={deceased} l="Mortality records" tone="muted" />
+        <Kpi icon={<HandCoins size={18} />} n={peso(donated)} l="Confirmed donations" />
+        <Kpi icon={<Inbox size={18} />} n={unread} l="Unread messages" tone="warn" />
       </div>
       <div className="dash-grid">
         <div className="panel">
@@ -66,13 +81,108 @@ export function DashboardPage() {
 function DogTable({
   list,
   extra,
+  openId,
+  onChanged,
 }: {
   list: Dog[]
   extra?: (d: Dog) => ReactNode
+  openId?: string | null
+  onChanged?: () => void
 }) {
-  const [peek, setPeek] = useState<string | null>(null)
+  const [peek, setPeek] = useState<string | null>(openId || null)
+  const [confirm, setConfirm] = useState<Dog | null>(null)
+  const [undo, setUndo] = useState<Dog | null>(null)
+  const { kind } = useDevice()
+  const { isAdmin } = useAuth()
+
+  useEffect(() => { if (openId) setPeek(openId) }, [openId])
+
+  async function remove(d: Dog) {
+    const { error } = await supabase.rpc('delete_dog', { p_id: d.id })
+    if (error) return error.message
+    setConfirm(null)
+    setUndo(d)
+    onChanged?.()
+    return null
+  }
+
+  async function restore(d: Dog) {
+    await supabase.rpc('restore_dog', { p_id: d.id })
+    setUndo(null)
+    onChanged?.()
+  }
+
+  const actions = (d: Dog) => (
+    <>
+      <button className="btn btn-ghost" type="button" onClick={() => setPeek(d.id)}>View</button>
+      <Link className="btn btn-ghost" to={`/ops/dogs/${d.id}`}>Edit</Link>
+      {extra?.(d)}
+      {isAdmin ? (
+        <button className="btn btn-remove" type="button" onClick={() => setConfirm(d)} aria-label={`Delete ${d.name}`}>
+          <Trash2 size={14} /> Delete
+        </button>
+      ) : null}
+    </>
+  )
+
+  const banner = undo ? (
+    <div className="flash" role="status">
+      <Trash2 size={16} />
+      <span><b>{undo.name}</b> moved to Recently deleted.</span>
+      <button className="link" type="button" onClick={() => restore(undo)}>Undo</button>
+      <button className="flash-x" type="button" aria-label="Dismiss" onClick={() => setUndo(null)}><X size={16} /></button>
+    </div>
+  ) : null
+
+  const extras = (
+    <>
+      {confirm ? (
+        <ConfirmDialog
+          title={`Delete ${confirm.name}?`}
+          confirmLabel="Delete dog"
+          busyLabel="Deleting…"
+          danger
+          onClose={() => setConfirm(null)}
+          onConfirm={() => remove(confirm)}
+        >
+          {confirm.name}'s profile will be hidden from the website and the staff desk and moved to <b>Recently deleted</b>.
+          You can restore it there for 7 days, then it is deleted for good.
+        </ConfirmDialog>
+      ) : null}
+      {peek ? <DogPeek dogId={peek} onClose={() => setPeek(null)} /> : null}
+    </>
+  )
+
+  if (kind === 'phone') {
+    return (
+      <>
+        {banner}
+        <div className="dog-list">
+          {list.length ? list.map((d) => (
+            <div className="dog-row" key={d.id}>
+              <button className="dog-row-main" type="button" onClick={() => setPeek(d.id)} aria-label={`View ${d.name}`}>
+                <DogPhoto dog={d} className="dog-row-photo" />
+                <div className="dog-row-info">
+                  <div className="dog-row-top">
+                    <b>{d.name}</b>
+                    <span className={`status ${statusClass(d.status)}`}>{d.status}</span>
+                  </div>
+                  <div className="dog-row-meta">{d.sex} · {d.age} · {d.breed}</div>
+                  {d.color ? <div className="dog-row-meta">{d.color}</div> : null}
+                </div>
+              </button>
+              <div className="dog-row-actions">{actions(d)}</div>
+            </div>
+          )) : <p className="empty panel">No records.</p>}
+        </div>
+        {extras}
+      </>
+    )
+  }
+
   return (
     <>
+      {banner}
       <div className="table-wrap">
         <table>
           <thead>
@@ -87,20 +197,24 @@ function DogTable({
                 <td>{d.color || '—'}</td>
                 <td>{d.breed}</td>
                 <td><span className={`status ${statusClass(d.status)}`}>{d.status}</span></td>
-                <td>
-                  <div className="inline">
-                    <button className="btn btn-ghost" type="button" onClick={() => setPeek(d.id)}>View</button>
-                    <Link className="btn btn-ghost" to={`/ops/dogs/${d.id}`}>Edit</Link>
-                    {extra?.(d)}
-                  </div>
-                </td>
+                <td><div className="inline">{actions(d)}</div></td>
               </tr>
             )) : <tr><td colSpan={7} className="empty">No records.</td></tr>}
           </tbody>
         </table>
       </div>
-      {peek ? <DogPeek dogId={peek} onClose={() => setPeek(null)} /> : null}
+      {extras}
     </>
+  )
+}
+
+function Flash({ text, onClose }: { text: string; onClose: () => void }) {
+  return (
+    <div className="flash ok" role="status">
+      <CheckCircle2 size={16} />
+      <span>{text}</span>
+      <button className="flash-x" type="button" aria-label="Dismiss" onClick={onClose}><X size={16} /></button>
+    </div>
   )
 }
 
@@ -108,6 +222,9 @@ export function DogsPage() {
   const [dogs, setDogs] = useState<Dog[]>([])
   const [q, setQ] = useState('')
   const navigate = useNavigate()
+  const location = useLocation()
+  const [params] = useSearchParams()
+  const [flash, setFlash] = useState<string>((location.state as { flash?: string } | null)?.flash || '')
 
   async function load() {
     const { data } = await supabase.from('dogs').select('*').order('name')
@@ -128,12 +245,15 @@ export function DogsPage() {
     <div>
       <h1 className="page-h1">Pet Register</h1>
       <p className="page-sub">Dogs in care. Adopted and mortality records live in their own tables.</p>
+      {flash ? <Flash text={flash} onClose={() => setFlash('')} /> : null}
       <div className="staff-toolbar">
         <input className="staff-search" placeholder="Search by name, age, color, or sex" value={q} onChange={(e) => setQ(e.target.value)} />
-        <button className="btn btn-coral" type="button" onClick={() => navigate('/ops/dogs/new')}>Add a dog</button>
+        <button className="btn btn-primary" type="button" onClick={() => navigate('/ops/dogs/new')}><Plus size={16} /> Add a dog</button>
       </div>
       <DogTable
         list={rows}
+        openId={params.get('open')}
+        onChanged={load}
         extra={(d) => (
           <>
             <button className="btn btn-ghost" type="button" onClick={() => mark(d.id, 'Adopted')}>Mark adopted</button>
@@ -147,36 +267,133 @@ export function DogsPage() {
 
 export function AdoptedPage() {
   const [dogs, setDogs] = useState<Dog[]>([])
-  useEffect(() => {
-    supabase.from('dogs').select('*').eq('status', 'Adopted').then(({ data }) => setDogs((data as Dog[]) || []))
-  }, [])
+  async function load() {
+    const { data } = await supabase.from('dogs').select('*').eq('status', 'Adopted')
+    setDogs((data as Dog[]) || [])
+  }
+  useEffect(() => { load() }, [])
   async function restore(id: string) {
     await supabase.from('dogs').update({ status: 'Available' }).eq('id', id)
-    setDogs((cur) => cur.filter((d) => d.id !== id))
+    load()
   }
   return (
     <div>
       <h1 className="page-h1">Adopted</h1>
       <p className="page-sub">Dogs that have been adopted.</p>
-      <DogTable list={dogs} extra={(d) => <button className="btn btn-ghost" type="button" onClick={() => restore(d.id)}>Restore</button>} />
+      <DogTable list={dogs} onChanged={load} extra={(d) => <button className="btn btn-ghost" type="button" onClick={() => restore(d.id)}>Back to available</button>} />
     </div>
   )
 }
 
 export function MortalityPage() {
   const [dogs, setDogs] = useState<Dog[]>([])
-  useEffect(() => {
-    supabase.from('dogs').select('*').eq('status', 'Deceased').then(({ data }) => setDogs((data as Dog[]) || []))
-  }, [])
+  async function load() {
+    const { data } = await supabase.from('dogs').select('*').eq('status', 'Deceased')
+    setDogs((data as Dog[]) || [])
+  }
+  useEffect(() => { load() }, [])
   async function restore(id: string) {
     await supabase.from('dogs').update({ status: 'Available', died_at: null }).eq('id', id)
-    setDogs((cur) => cur.filter((d) => d.id !== id))
+    load()
   }
   return (
     <div>
       <h1 className="page-h1">Mortality</h1>
       <p className="page-sub">Deceased dogs are kept here and are not listed for adoption.</p>
-      <DogTable list={dogs} extra={(d) => <button className="btn btn-ghost" type="button" onClick={() => restore(d.id)}>Restore</button>} />
+      <DogTable list={dogs} onChanged={load} extra={(d) => <button className="btn btn-ghost" type="button" onClick={() => restore(d.id)}>Back to available</button>} />
+    </div>
+  )
+}
+
+type DeletedDog = Pick<Dog, 'id' | 'name' | 'oso_id' | 'sex' | 'age' | 'breed' | 'status' | 'photo_url'> & {
+  deleted_at: string
+  deleted_by_name: string
+}
+
+function daysLeft(deletedAt: string) {
+  const ms = new Date(deletedAt).getTime() + 7 * 86400000 - Date.now()
+  const d = Math.ceil(ms / 86400000)
+  return d <= 0 ? 'Deleted for good tonight' : d === 1 ? '1 day left' : `${d} days left`
+}
+
+export function DeletedDogsPage() {
+  const { isAdmin } = useAuth()
+  const [rows, setRows] = useState<DeletedDog[]>([])
+  const [loaded, setLoaded] = useState(false)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [purge, setPurge] = useState<DeletedDog | null>(null)
+  const [flash, setFlash] = useState('')
+
+  async function load() {
+    const { data } = await supabase.rpc('deleted_dogs')
+    setRows((data as DeletedDog[]) || [])
+    setLoaded(true)
+  }
+  useEffect(() => { if (isAdmin) load() }, [isAdmin])
+
+  async function restore(d: DeletedDog) {
+    if (busy) return
+    setBusy(d.id)
+    const { error } = await supabase.rpc('restore_dog', { p_id: d.id })
+    setBusy(null)
+    if (error) { setFlash(error.message); return }
+    setFlash(`${d.name} was restored.`)
+    load()
+  }
+
+  async function purgeNow(d: DeletedDog) {
+    const { error } = await supabase.rpc('purge_dog', { p_id: d.id })
+    if (error) return error.message
+    setPurge(null)
+    setFlash(`${d.name} was deleted for good.`)
+    load()
+    return null
+  }
+
+  if (!isAdmin) return <p className="empty">Only administrators can see deleted dogs.</p>
+  return (
+    <div>
+      <h1 className="page-h1">Recently deleted</h1>
+      <p className="page-sub">Deleted dog profiles stay here for 7 days so you can restore them. After that they are deleted for good.</p>
+      {flash ? <Flash text={flash} onClose={() => setFlash('')} /> : null}
+      {loaded && !rows.length ? <p className="empty panel">Nothing here. Deleted dogs show up here for 7 days.</p> : null}
+      <div className="dog-list">
+        {rows.map((d) => (
+          <div className="dog-row" key={d.id}>
+            <div className="dog-row-main">
+              <DogPhoto dog={d} className="dog-row-photo" />
+              <div className="dog-row-info">
+                <div className="dog-row-top">
+                  <b>{d.name}</b>
+                  <span className="status dead">{daysLeft(d.deleted_at)}</span>
+                </div>
+                <div className="dog-row-meta">{d.sex} · {d.age} · {d.breed} · {d.status}</div>
+                <div className="dog-row-meta">Deleted {ago(d.deleted_at)}{d.deleted_by_name ? ` by ${d.deleted_by_name}` : ''}</div>
+              </div>
+            </div>
+            <div className="dog-row-actions">
+              <button className="btn btn-primary btn-sm" type="button" disabled={busy === d.id} onClick={() => restore(d)}>
+                {busy === d.id ? <><Loader2 size={15} className="spin" /> Restoring…</> : <><RotateCcw size={15} /> Restore</>}
+              </button>
+              <button className="btn btn-remove" type="button" disabled={busy === d.id} onClick={() => setPurge(d)}>
+                <Trash2 size={14} /> Delete now
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {purge ? (
+        <ConfirmDialog
+          title={`Delete ${purge.name} for good?`}
+          confirmLabel="Delete for good"
+          busyLabel="Deleting…"
+          danger
+          onClose={() => setPurge(null)}
+          onConfirm={() => purgeNow(purge)}
+        >
+          This can't be undone. {purge.name}'s profile and adoption applications will be removed permanently.
+        </ConfirmDialog>
+      ) : null}
     </div>
   )
 }
@@ -194,6 +411,12 @@ export function DogEditPage() {
   const [error, setError] = useState('')
   const [pups, setPups] = useState<Dog[]>([])
   const [pupName, setPupName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [addingPup, setAddingPup] = useState(false)
+  // A ref blocks a second tap before React re-renders the disabled button.
+  const busy = useRef(false)
+  const { isAdmin } = useAuth()
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   useEffect(() => {
     if (isNew) return
@@ -205,7 +428,20 @@ export function DogEditPage() {
 
   async function save(e: FormEvent) {
     e.preventDefault()
-    if (!dog.name) { setError('Name is required.'); return }
+    if (busy.current) return
+    if (!dog.name?.trim()) { setError('Name is required.'); return }
+    busy.current = true
+    setSaving(true)
+    setError('')
+    try {
+      await saveDog()
+    } finally {
+      busy.current = false
+      setSaving(false)
+    }
+  }
+
+  async function saveDog() {
     let photo_url = dog.photo_url || ''
     if (file) {
       const path = `${crypto.randomUUID()}-${file.name.replace(/\s+/g, '-')}`
@@ -214,7 +450,7 @@ export function DogEditPage() {
       photo_url = supabase.storage.from('dog-photos').getPublicUrl(path).data.publicUrl
     }
     const payload = {
-      name: dog.name,
+      name: dog.name!.trim(),
       sex: dog.sex,
       age: dog.age,
       breed: dog.breed || 'Aspin',
@@ -232,17 +468,19 @@ export function DogEditPage() {
     if (isNew) {
       const { data, error: err } = await supabase.from('dogs').insert(payload).select('id').single()
       if (err) { setError(err.message); return }
-      navigate(`/ops/dogs/${data.id}`)
+      navigate(`/ops/dogs?open=${data.id}`, { state: { flash: `${payload.name} was added to the Pet Register.` } })
     } else {
       const { error: err } = await supabase.from('dogs').update(payload).eq('id', id)
       if (err) { setError(err.message); return }
-      navigate('/ops/dogs')
+      navigate(`/ops/dogs?open=${id}`, { state: { flash: `Changes to ${payload.name} were saved.` } })
     }
   }
 
   async function addPuppy(e: FormEvent) {
     e.preventDefault()
-    if (!id || isNew || !pupName) return
+    if (!id || isNew || !pupName.trim() || busy.current) return
+    busy.current = true
+    setAddingPup(true)
     await supabase.from('dogs').insert({
       name: pupName, sex: 'Female', age: 'Puppy', breed: dog.breed || 'Aspin', size: 'Small',
       status: 'Available', mother_id: id, story: `${pupName} is a puppy of ${dog.name}.`,
@@ -250,6 +488,8 @@ export function DogEditPage() {
     setPupName('')
     const { data } = await supabase.from('dogs').select('*').eq('mother_id', id)
     setPups((data as Dog[]) || [])
+    busy.current = false
+    setAddingPup(false)
   }
 
   const locked = dog.status === 'Adopted' || dog.status === 'Deceased'
@@ -259,7 +499,8 @@ export function DogEditPage() {
     <div>
       <button className="link" type="button" onClick={() => navigate(-1)}>← Back</button>
       <h1 className="page-h1">{isNew ? 'Add a dog' : `Edit ${dog.name || 'dog'}`}</h1>
-      <form className="admin-form" onSubmit={save}>
+      <form className="admin-form" onSubmit={save} aria-busy={saving}>
+        <fieldset className="plain" disabled={saving}>
         {dog.photo_url ? <img src={dog.photo_url} alt="" style={{ width: 160, aspectRatio: '1', objectFit: 'cover', borderRadius: 12 }} /> : null}
         <label>Photo</label>
         <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
@@ -281,20 +522,53 @@ export function DogEditPage() {
           <div><label>Temperament</label><input value={dog.temperament || ''} onChange={(e) => setDog({ ...dog, temperament: e.target.value })} /></div>
           <div className="full"><label>Story</label><textarea rows={4} value={dog.story || ''} onChange={(e) => setDog({ ...dog, story: e.target.value })} /></div>
         </div>
-        <label className="row"><input type="checkbox" checked={!!dog.vax_5in1} onChange={(e) => setDog({ ...dog, vax_5in1: e.target.checked })} /> 5-in-1</label>
-        <label className="row"><input type="checkbox" checked={!!dog.anti_rabies} onChange={(e) => setDog({ ...dog, anti_rabies: e.target.checked })} /> Anti-rabies</label>
-        <label className="row"><input type="checkbox" checked={!!dog.dewormed} onChange={(e) => setDog({ ...dog, dewormed: e.target.checked })} /> Dewormed</label>
-        <label className="row"><input type="checkbox" checked={!!dog.spayed} onChange={(e) => setDog({ ...dog, spayed: e.target.checked })} /> Spayed / Neutered</label>
+        <fieldset className="check-group">
+          <legend>Health</legend>
+          <label className="check"><input type="checkbox" checked={!!dog.vax_5in1} onChange={(e) => setDog({ ...dog, vax_5in1: e.target.checked })} /> 5-in-1 vaccine</label>
+          <label className="check"><input type="checkbox" checked={!!dog.anti_rabies} onChange={(e) => setDog({ ...dog, anti_rabies: e.target.checked })} /> Anti-rabies</label>
+          <label className="check"><input type="checkbox" checked={!!dog.dewormed} onChange={(e) => setDog({ ...dog, dewormed: e.target.checked })} /> Dewormed</label>
+          <label className="check"><input type="checkbox" checked={!!dog.spayed} onChange={(e) => setDog({ ...dog, spayed: e.target.checked })} /> Spayed / Neutered</label>
+        </fieldset>
+        </fieldset>
         {error ? <p className="err">{error}</p> : null}
-        <button className="btn btn-coral btn-block" type="submit">Save</button>
+        <button className="btn btn-primary btn-block" type="submit" disabled={saving}>
+          {saving ? <><Loader2 size={17} className="spin" /> {file ? 'Uploading photo and saving…' : 'Saving…'}</> : isNew ? 'Add dog' : 'Save changes'}
+        </button>
       </form>
+      {!isNew && isAdmin ? (
+        <div className="danger-zone">
+          <div>
+            <b>Delete this dog</b>
+            <p className="muted">Moves the profile to Recently deleted. You can restore it for 7 days.</p>
+          </div>
+          <button className="btn btn-remove" type="button" disabled={saving} onClick={() => setConfirmDelete(true)}><Trash2 size={15} /> Delete dog</button>
+        </div>
+      ) : null}
+      {confirmDelete ? (
+        <ConfirmDialog
+          title={`Delete ${dog.name || 'this dog'}?`}
+          confirmLabel="Delete dog"
+          busyLabel="Deleting…"
+          danger
+          onClose={() => setConfirmDelete(false)}
+          onConfirm={async () => {
+            const { error: err } = await supabase.rpc('delete_dog', { p_id: id })
+            if (err) return err.message
+            navigate('/ops/dogs', { state: { flash: `${dog.name} moved to Recently deleted. Restore it there within 7 days if this was a mistake.` } })
+            return null
+          }}
+        >
+          {dog.name}'s profile will be hidden from the website and the staff desk and moved to <b>Recently deleted</b>.
+          You can restore it there for 7 days, then it is deleted for good.
+        </ConfirmDialog>
+      ) : null}
       {!isNew && femaleAdult ? (
         <div className="panel" style={{ marginTop: 16, maxWidth: 720 }}>
           <h3>Her puppies</h3>
           {pups.map((p) => <p key={p.id}><Link to={`/ops/dogs/${p.id}`}>{p.name}</Link> · {p.status}</p>)}
           <form onSubmit={addPuppy} className="row wrap" style={{ marginTop: 10 }}>
-            <input placeholder="Puppy name" value={pupName} onChange={(e) => setPupName(e.target.value)} />
-            <button className="btn btn-coral" type="submit">Add puppy</button>
+            <input placeholder="Puppy name" value={pupName} onChange={(e) => setPupName(e.target.value)} disabled={addingPup} />
+            <button className="btn btn-primary" type="submit" disabled={addingPup}>{addingPup ? <><Loader2 size={16} className="spin" /> Adding…</> : 'Add puppy'}</button>
           </form>
         </div>
       ) : null}
@@ -327,7 +601,40 @@ export function AdoptionsPage() {
     } else setIdUrl('')
   }
 
+  const { kind } = useDevice()
+
   function table(list: typeof rows, pending: boolean, empty: string) {
+    if (kind === 'phone') {
+      return (
+        <div className="dog-list">
+          {list.length ? list.map((a) => (
+            <div className="dog-row" key={a.id}>
+              <div className="dog-row-main">
+                <span className="person-avatar">{a.applicant.slice(0, 1).toUpperCase()}</span>
+                <div className="dog-row-info">
+                  <div className="dog-row-top">
+                    <b>{a.applicant}</b>
+                    <span className={`status ${statusClass(a.status)}`}>{a.status}</span>
+                  </div>
+                  <div className="dog-row-meta">Wants to adopt <b>{a.dogs?.name || 'a dog'}</b></div>
+                  <div className="dog-row-meta"><a href={`tel:${a.phone}`}>{a.phone}</a> · {ago(a.created_at)} · {a.id_photo_url ? 'ID attached' : 'No ID'}</div>
+                  {a.note ? <div className="dog-row-note">{a.note}</div> : null}
+                </div>
+              </div>
+              <div className="dog-row-actions">
+                <button className="btn btn-ghost" type="button" onClick={() => open(a)}>View</button>
+                {pending ? (
+                  <>
+                    <button className="btn btn-primary btn-sm" type="button" onClick={() => decide(a.id, 'approve')}>Approve</button>
+                    <button className="btn btn-remove" type="button" onClick={() => decide(a.id, 'reject')}>Reject</button>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          )) : <p className="empty panel">{empty}</p>}
+        </div>
+      )
+    }
     return (
       <div className="table-wrap">
         <table>
@@ -378,7 +685,7 @@ export function AdoptionsPage() {
       {table(rejected, false, 'No rejected applications.')}
       {peek ? (
         <Modal onClose={() => setPeek(null)}>
-          <div className="create-head"><b>Adoption application</b><button className="chat-x" type="button" onClick={() => setPeek(null)}>×</button></div>
+          <div className="create-head"><b>Adoption application</b><button className="chat-x" type="button" onClick={() => setPeek(null)} aria-label="Close"><X size={18} /></button></div>
           <div className="adopt-card-body">
             <div className="adopt-review">
               <div><span>Applicant</span><b>{peek.applicant}</b></div>
@@ -395,34 +702,256 @@ export function AdoptionsPage() {
 
 export function DonationsPage() {
   const [rows, setRows] = useState<Donation[]>([])
-  useEffect(() => {
-    supabase.from('donations').select('*').order('created_at', { ascending: false }).then(({ data }) => setRows((data as Donation[]) || []))
-  }, [])
-  const total = rows.reduce((s, d) => s + Number(d.amount), 0)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [reject, setReject] = useState<Donation | null>(null)
+  const [receiptUrl, setReceiptUrl] = useState('')
+  const [flash, setFlash] = useState('')
+  const { kind } = useDevice()
+
+  async function load() {
+    const { data } = await supabase.from('donations').select('*').order('created_at', { ascending: false })
+    setRows((data as Donation[]) || [])
+  }
+  useEffect(() => { load() }, [])
+
+  async function decide(d: Donation, confirm: boolean) {
+    const { error } = await supabase.rpc('decide_donation', { p_id: d.id, p_confirm: confirm })
+    if (error) return error.message
+    setFlash(confirm ? `${peso(Number(d.amount))} from ${d.name} confirmed.` : `${peso(Number(d.amount))} from ${d.name} rejected.`)
+    load()
+    return null
+  }
+
+  async function confirmNow(d: Donation) {
+    if (busy) return
+    setBusy(d.id)
+    const err = await decide(d, true)
+    setBusy(null)
+    if (err) setFlash(err)
+  }
+
+  async function openReceipt(d: Donation) {
+    const { data } = await supabase.storage.from('donation-receipts').createSignedUrl(d.receipt_path, 120)
+    setReceiptUrl(data?.signedUrl || '')
+  }
+
+  const pending = rows.filter((d) => d.status === 'pending')
+  const confirmed = rows.filter((d) => d.status === 'confirmed')
+  const rejected = rows.filter((d) => d.status === 'rejected')
+  const total = confirmed.reduce((s, d) => s + Number(d.amount), 0)
+  const waiting = pending.reduce((s, d) => s + Number(d.amount), 0)
+
+  const card = (d: Donation, actions: boolean) => (
+    <div className="dog-row" key={d.id}>
+      <div className="dog-row-main">
+        <span className="person-avatar"><HandCoins size={18} /></span>
+        <div className="dog-row-info">
+          <div className="dog-row-top">
+            <b>{d.name}</b>
+            <span className="amount">{peso(Number(d.amount))}</span>
+          </div>
+          <div className="dog-row-meta">{d.method}{d.reference_no ? ` · Ref ${d.reference_no}` : ''} · {d.purpose}</div>
+          <div className="dog-row-meta">{ago(d.created_at)}{d.email ? ` · ${d.email}` : ''}</div>
+          {d.message ? <div className="dog-row-note">{d.message}</div> : null}
+        </div>
+      </div>
+      {actions || d.receipt_path ? (
+        <div className="dog-row-actions">
+          {d.receipt_path ? <button className="btn btn-ghost" type="button" onClick={() => openReceipt(d)}><ImageIcon size={14} /> Receipt</button> : null}
+          {actions ? (
+            <>
+              <button className="btn btn-primary btn-sm" type="button" disabled={busy === d.id} onClick={() => confirmNow(d)}>
+                {busy === d.id ? <><Loader2 size={15} className="spin" /> Confirming…</> : <><Check size={15} /> Confirm</>}
+              </button>
+              <button className="btn btn-remove" type="button" disabled={busy === d.id} onClick={() => setReject(d)}><X size={14} /> Reject</button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
+
+  const table = (list: Donation[], empty: string) => kind === 'phone' ? (
+    <div className="dog-list">{list.length ? list.map((d) => card(d, false)) : <p className="empty panel">{empty}</p>}</div>
+  ) : (
+    <div className="table-wrap">
+      <table>
+        <thead><tr><th>From</th><th>Amount</th><th>Method</th><th>Reference</th><th>Purpose</th><th>When</th><th></th></tr></thead>
+        <tbody>
+          {list.length ? list.map((d) => (
+            <tr key={d.id}>
+              <td>{d.name}</td><td>{peso(Number(d.amount))}</td><td>{d.method}</td><td>{d.reference_no || '—'}</td><td>{d.purpose}</td><td>{ago(d.created_at)}</td>
+              <td>{d.receipt_path ? <button className="btn btn-ghost" type="button" onClick={() => openReceipt(d)}><ImageIcon size={14} /> Receipt</button> : null}</td>
+            </tr>
+          )) : <tr><td colSpan={7} className="empty">{empty}</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  )
+
   return (
     <div>
       <h1 className="page-h1">Donations</h1>
-      <p className="page-sub">Gifts are added to the total as soon as they are sent.</p>
-      <div className="kpi" style={{ maxWidth: 240, marginBottom: 16 }}><div className="n">{peso(total)}</div><div className="l">Donations received</div></div>
-      <div className="table-wrap">
-        <table>
-          <thead><tr><th>From</th><th>Amount</th><th>Purpose</th><th>Method</th><th>When</th></tr></thead>
-          <tbody>
-            {rows.map((d) => (
-              <tr key={d.id}><td>{d.name}</td><td>{peso(Number(d.amount))}</td><td>{d.purpose}</td><td>{d.method}</td><td>{ago(d.created_at)}</td></tr>
-            ))}
-          </tbody>
-        </table>
+      <p className="page-sub">Check each donation against GCash or the bank before confirming. Only confirmed donations count in the total.</p>
+      {flash ? <Flash text={flash} onClose={() => setFlash('')} /> : null}
+      <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+        <Kpi icon={<HandCoins size={18} />} n={peso(total)} l="Confirmed donations" />
+        <Kpi icon={<ClipboardList size={18} />} n={`${pending.length} · ${peso(waiting)}`} l="Waiting to confirm" tone="warn" />
       </div>
+
+      <h2 className="table-h">Waiting to confirm {pending.length ? <span className="nav-badge">{pending.length}</span> : null}</h2>
+      <div className="dog-list">
+        {pending.length ? pending.map((d) => card(d, true)) : <p className="empty panel">Nothing to confirm right now.</p>}
+      </div>
+
+      <h2 className="table-h">Confirmed</h2>
+      {table(confirmed, 'No confirmed donations yet.')}
+
+      {rejected.length ? (
+        <>
+          <h2 className="table-h">Rejected</h2>
+          {table(rejected, '')}
+        </>
+      ) : null}
+
+      {reject ? (
+        <ConfirmDialog
+          title="Reject this donation?"
+          confirmLabel="Reject donation"
+          busyLabel="Rejecting…"
+          danger
+          onClose={() => setReject(null)}
+          onConfirm={async () => {
+            const err = await decide(reject, false)
+            if (!err) setReject(null)
+            return err
+          }}
+        >
+          Only reject it if you can't find {peso(Number(reject.amount))}{reject.reference_no ? ` with reference ${reject.reference_no}` : ''} in GCash or the bank.
+          It won't be counted in the totals.
+        </ConfirmDialog>
+      ) : null}
+      {receiptUrl ? (
+        <Modal onClose={() => setReceiptUrl('')}>
+          <div className="create-head"><b>Receipt</b><button className="chat-x" type="button" onClick={() => setReceiptUrl('')} aria-label="Close"><X size={18} /></button></div>
+          <div className="adopt-card-body"><img src={receiptUrl} alt="Donation receipt" style={{ width: '100%', borderRadius: 10 }} /></div>
+        </Modal>
+      ) : null}
+    </div>
+  )
+}
+
+const KIND_LABEL: Record<string, string> = { contact: 'Message', adoption: 'Adoption', donation: 'Donation', staff: 'Staff application' }
+const KIND_CLASS: Record<string, string> = { contact: 'adopted', adoption: 'pending', donation: 'active', staff: 'pending' }
+
+type InboxReply = { id: string; message_id: string; body: string; sent_by_name: string; created_at: string }
+
+const canEmail = (email: string) => /^[^\s@]+@[^\s@]+$/.test((email || '').trim())
+
+function MessageCard({ m, replies, onRead, onReplied }: {
+  m: InboxMessage
+  replies: InboxReply[]
+  onRead: (id: string) => void
+  onReplied: (r: InboxReply) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+  const [sent, setSent] = useState(false)
+  const busy = useRef(false)
+
+  async function send(e: FormEvent) {
+    e.preventDefault()
+    if (busy.current || !text.trim()) return
+    busy.current = true
+    setSending(true)
+    setError('')
+    const { data, error: err } = await supabase.functions.invoke('notify-admin', {
+      body: { action: 'reply', message_id: m.id, body: text.trim() },
+    })
+    busy.current = false
+    setSending(false)
+    if (err || data?.error) {
+      let msg = data?.error as string | undefined
+      if (!msg && err && 'context' in err) {
+        try { msg = (await (err as { context: Response }).context.json()).error } catch { /* ignore */ }
+      }
+      setError(msg || 'The reply could not be sent. Please try again.')
+      return
+    }
+    if (data?.reply) onReplied(data.reply as InboxReply)
+    setText('')
+    setOpen(false)
+    setSent(true)
+  }
+
+  return (
+    <div className={'panel msg' + (m.read ? '' : ' unread')}>
+      <div className="msg-head">
+        <span className={`status ${KIND_CLASS[m.kind] || 'adopted'}`}>{KIND_LABEL[m.kind] || m.kind}</span>
+        {!m.read ? <span className="msg-new">New</span> : null}
+        {replies.length ? <span className="msg-replied"><Check size={12} /> Replied</span> : null}
+        <span className="msg-time">{ago(m.created_at)}</span>
+      </div>
+      <b className="msg-subject">{m.subject}</b>
+      <div className="muted msg-from">{m.name}{m.email ? ` · ${m.email}` : ' · no email given'}</div>
+      <p className="msg-body">{m.body}</p>
+
+      {replies.map((r) => (
+        <div className="msg-reply" key={r.id}>
+          <div className="msg-reply-head"><Reply size={13} /> {r.sent_by_name || 'Staff'} replied · {ago(r.created_at)}</div>
+          <p>{r.body}</p>
+        </div>
+      ))}
+
+      {open ? (
+        <form className="msg-compose" onSubmit={send}>
+          <label className="sr-only" htmlFor={`reply-${m.id}`}>Reply to {m.name}</label>
+          <textarea
+            id={`reply-${m.id}`}
+            rows={4}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={`Write your reply to ${m.name}…`}
+            disabled={sending}
+            autoFocus
+          />
+          <div className="muted msg-to">Sends from the PawTrack email to {m.email}</div>
+          {error ? <p className="err">{error}</p> : null}
+          <div className="inline">
+            <button className="btn btn-primary btn-sm" type="submit" disabled={sending || !text.trim()}>
+              {sending ? <><Loader2 size={15} className="spin" /> Sending…</> : <><Send size={15} /> Send reply</>}
+            </button>
+            <button className="btn btn-ghost" type="button" disabled={sending} onClick={() => { setOpen(false); setError('') }}>Cancel</button>
+          </div>
+        </form>
+      ) : (
+        <div className="inline">
+          {canEmail(m.email) ? (
+            <button className="btn btn-primary btn-sm" type="button" onClick={() => { setOpen(true); setSent(false) }}>
+              <Reply size={15} /> Reply
+            </button>
+          ) : null}
+          {m.kind === 'staff' ? <Link className="btn btn-light btn-sm" to="/ops/staff"><Users size={15} /> Review application</Link> : null}
+          {!m.read ? <button className="btn btn-ghost" type="button" onClick={() => onRead(m.id)}><Check size={14} /> Mark read</button> : null}
+          {sent ? <span className="msg-sent"><Check size={14} /> Reply sent</span> : null}
+        </div>
+      )}
     </div>
   )
 }
 
 export function InboxPage() {
   const [rows, setRows] = useState<InboxMessage[]>([])
+  const [replies, setReplies] = useState<InboxReply[]>([])
   async function load() {
-    const { data } = await supabase.from('inbox_messages').select('*').order('created_at', { ascending: false })
+    const [{ data }, { data: r }] = await Promise.all([
+      supabase.from('inbox_messages').select('*').order('created_at', { ascending: false }),
+      supabase.from('inbox_replies').select('*').order('created_at'),
+    ])
     setRows((data as InboxMessage[]) || [])
+    setReplies((r as InboxReply[]) || [])
   }
   useEffect(() => { load() }, [])
   async function read(id: string) {
@@ -432,42 +961,114 @@ export function InboxPage() {
   return (
     <div>
       <h1 className="page-h1">Inbox</h1>
-      <p className="page-sub">Shared inbox for admin and staff. Adoption applications and donations show up here.</p>
-      {rows.map((m) => (
-        <div className="panel" key={m.id} style={{ marginBottom: 10 }}>
-          <div className="row" style={{ justifyContent: 'space-between' }}>
-            <div>
-              <b>{m.subject}</b>{' '}
-              <span className={`status ${m.kind === 'adoption' ? 'pending' : m.kind === 'donation' ? 'active' : 'adopted'}`}>{m.kind}</span>
-              {!m.read ? <span className="status pending"> New</span> : null}
-              <div className="muted">{m.name} · {m.email} · {ago(m.created_at)}</div>
-            </div>
-            {!m.read ? <button className="btn btn-ghost" type="button" onClick={() => read(m.id)}>Mark read</button> : null}
-          </div>
-          <p style={{ marginTop: 10 }}>{m.body}</p>
-        </div>
-      ))}
+      <p className="page-sub">Messages, adoption applications, donations and staff applications. Each one is also emailed to the admin.</p>
+      {rows.length ? rows.map((m) => (
+        <MessageCard
+          key={m.id}
+          m={m}
+          replies={replies.filter((r) => r.message_id === m.id)}
+          onRead={read}
+          onReplied={(r) => {
+            setReplies((cur) => [...cur, r])
+            setRows((cur) => cur.map((x) => (x.id === m.id ? { ...x, read: true } : x)))
+          }}
+        />
+      )) : <p className="empty panel">No messages yet.</p>}
     </div>
   )
 }
 
 export function StaffAdminPage() {
-  const { isAdmin } = useAuth()
-  const [list, setList] = useState<Profile[]>([])
-  useEffect(() => {
-    supabase.from('profiles').select('*').in('role', ['staff', 'admin']).then(({ data }) => setList((data as Profile[]) || []))
-  }, [])
-  if (!isAdmin) return <p>Admin only.</p>
+  const { isAdmin, profile } = useAuth()
+  const [team, setTeam] = useState<Profile[]>([])
+  const [apps, setApps] = useState<Profile[]>([])
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState('')
+  const [removing, setRemoving] = useState<Profile | null>(null)
+  const [flash, setFlash] = useState('')
+
+  async function load() {
+    const [{ data: t }, { data: a }] = await Promise.all([
+      supabase.from('profiles').select('*').eq('status', 'active').in('role', ['staff', 'admin', 'volunteer']).order('display_name'),
+      supabase.rpc('staff_applications'),
+    ])
+    setTeam((t as Profile[]) || [])
+    setApps((a as Profile[]) || [])
+  }
+  useEffect(() => { if (isAdmin) load() }, [isAdmin])
+
+  async function decide(id: string, approve: boolean) {
+    setBusy(id)
+    setError('')
+    const { error: err } = await supabase.rpc('decide_staff_application', { p_id: id, p_approve: approve })
+    setBusy(null)
+    if (err) { setError(err.message); return }
+    load()
+  }
+
+  if (!isAdmin) return <p className="empty">Only administrators can manage staff.</p>
   return (
     <div>
       <h1 className="page-h1">Staff & Volunteers</h1>
-      <p className="page-sub">Create the account in Supabase Authentication, then promote it with supabase/promote-staff.sql.</p>
-      {list.map((u) => (
-        <div className="panel" key={u.id} style={{ marginBottom: 8 }}>
-          <b>{u.display_name}</b>
-          <div className="muted">{u.email} · {u.role}{u.status !== 'active' ? ` · ${u.status}` : ''}</div>
+      <p className="page-sub">Review staff applications and see who has access to the staff desk.</p>
+      {error ? <p className="err">{error}</p> : null}
+      {flash ? <Flash text={flash} onClose={() => setFlash('')} /> : null}
+
+      <h2 className="table-h">Pending applications {apps.length ? <span className="nav-badge">{apps.length}</span> : null}</h2>
+      {apps.length ? apps.map((u) => (
+        <div className="panel person" key={u.id}>
+          <span className="person-avatar">{u.display_name.slice(0, 1).toUpperCase()}</span>
+          <div className="person-info">
+            <b>{u.display_name}</b>
+            <div className="muted">@{u.username} · {u.email} · applied {ago(u.created_at)}</div>
+          </div>
+          <div className="inline">
+            <button className="btn btn-primary btn-sm" type="button" disabled={busy === u.id} onClick={() => decide(u.id, true)}>
+              <UserCheck size={15} /> Approve
+            </button>
+            <button className="btn btn-remove btn-sm" type="button" disabled={busy === u.id} onClick={() => decide(u.id, false)}>
+              <UserX size={15} /> Reject
+            </button>
+          </div>
+        </div>
+      )) : <p className="empty">No applications waiting. People apply from the staff sign-in page.</p>}
+
+      <h2 className="table-h">Active team</h2>
+      {team.map((u) => (
+        <div className="panel person" key={u.id}>
+          <span className="person-avatar">{u.display_name.slice(0, 1).toUpperCase()}</span>
+          <div className="person-info">
+            <b>{u.display_name}{u.id === profile?.id ? ' (you)' : ''}</b>
+            <div className="muted">@{u.username} · {u.email}</div>
+          </div>
+          <span className={`status ${u.role === 'admin' ? 'pending' : 'active'}`}>{u.role === 'admin' ? 'Administrator' : u.role === 'volunteer' ? 'Volunteer' : 'Staff'}</span>
+          {u.role !== 'admin' && u.id !== profile?.id ? (
+            <button className="btn btn-remove" type="button" onClick={() => setRemoving(u)} aria-label={`Delete ${u.display_name}`}>
+              <Trash2 size={14} /> Delete
+            </button>
+          ) : null}
         </div>
       ))}
+      {removing ? (
+        <ConfirmDialog
+          title={`Delete ${removing.display_name}'s account?`}
+          confirmLabel="Delete account"
+          busyLabel="Deleting…"
+          danger
+          onClose={() => setRemoving(null)}
+          onConfirm={async () => {
+            const { error: err } = await supabase.rpc('delete_staff_account', { p_id: removing.id })
+            if (err) return err.message
+            setFlash(`${removing.display_name}'s account was deleted.`)
+            setRemoving(null)
+            load()
+            return null
+          }}
+        >
+          <b>{removing.display_name}</b> ({removing.email}) will be signed out and can no longer use the staff desk.
+          This can't be undone. They would have to apply again to come back.
+        </ConfirmDialog>
+      ) : null}
     </div>
   )
 }

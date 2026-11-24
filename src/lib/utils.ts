@@ -1,5 +1,17 @@
 import type { Dog, DogStatus } from '../types'
 
+export const PASSWORD_RULES: Array<[string, (p: string) => boolean]> = [
+  ['At least 8 characters', (p) => p.length >= 8],
+  ['An uppercase letter', (p) => /[A-Z]/.test(p)],
+  ['A lowercase letter', (p) => /[a-z]/.test(p)],
+  ['A number', (p) => /\d/.test(p)],
+  ['A special character', (p) => /[^A-Za-z0-9]/.test(p)],
+]
+
+export function passwordOk(password: string) {
+  return PASSWORD_RULES.every(([, test]) => test(password))
+}
+
 export function peso(amount: number) {
   return `₱${Number(amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }

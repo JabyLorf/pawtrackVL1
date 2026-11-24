@@ -9,6 +9,9 @@ type AuthState = {
   isAdmin: boolean
   reloadProfile: () => Promise<void>
   signIn: (email: string, password: string) => Promise<string | null>
+  signUp: (email: string, password: string, username: string, name: string) => Promise<string | null>
+  verifySignupOtp: (email: string, token: string) => Promise<string | null>
+  resendSignupOtp: (email: string) => Promise<string | null>
   signOut: () => Promise<void>
 }
 
@@ -57,6 +60,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async signIn(email, password) {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
+        return error ? error.message : null
+      },
+      async signUp(email, password, username, name) {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { username, display_name: name } },
+        })
+        return error ? error.message : null
+      },
+      async verifySignupOtp(email, token) {
+        const { error } = await supabase.auth.verifyOtp({ email, token, type: 'signup' })
+        return error ? error.message : null
+      },
+      async resendSignupOtp(email) {
+        const { error } = await supabase.auth.resend({ type: 'signup', email })
         return error ? error.message : null
       },
       async signOut() {

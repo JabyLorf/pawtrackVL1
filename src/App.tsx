@@ -2,13 +2,15 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { DeviceProvider } from './context/DeviceContext'
 import { OpsLayout } from './components/OpsLayout'
+import { AppBackHandler } from './components/AppBackHandler'
 import { AdoptPage, HomePage } from './pages/PublicPages'
 import { AboutPage, ContactPage, DonatePage } from './pages/SitePages'
-import { StaffLoginPage } from './pages/AuthPages'
+import { StaffApplyPage, StaffLoginPage } from './pages/AuthPages'
 import {
   AdoptedPage,
   AdoptionsPage,
   DashboardPage,
+  DeletedDogsPage,
   DogEditPage,
   DogsPage,
   DonationsPage,
@@ -22,6 +24,7 @@ export default function App() {
     <DeviceProvider>
       <AuthProvider>
         <BrowserRouter>
+          <AppBackHandler />
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/adopt" element={<AdoptPage />} />
@@ -30,6 +33,7 @@ export default function App() {
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/login" element={<Navigate to="/staff-login" replace />} />
             <Route path="/staff-login" element={<StaffLoginPage />} />
+            <Route path="/staff-apply" element={<StaffApplyPage />} />
             <Route path="/ops" element={<OpsLayout />}>
               <Route index element={<DashboardPage />} />
               <Route path="dogs" element={<DogsPage />} />
@@ -41,6 +45,7 @@ export default function App() {
               <Route path="donations" element={<DonationsPage />} />
               <Route path="inbox" element={<InboxPage />} />
               <Route path="staff" element={<StaffAdminPage />} />
+              <Route path="deleted" element={<DeletedDogsPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

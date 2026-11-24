@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">PawTrack</string>
+    <string name="title_activity_main">PawTrack</string>
+    <string name="package_name">com.ormocstraysoasis.pawtrack</string>
+    <string name="custom_url_scheme">com.ormocstraysoasis.pawtrack</string>
+</resources>

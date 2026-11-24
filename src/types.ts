@@ -11,8 +11,9 @@ export type DogStatus =
   | 'Adopted'
   | 'Deceased'
 export type AdoptionStatus = 'pending' | 'approved' | 'rejected'
-export type DonationMethod = 'GCash' | 'Bank Transfer' | 'Cash / Walk-in' | 'In-kind Donation'
-export type MessageKind = 'contact' | 'adoption' | 'donation'
+export type DonationStatus = 'pending' | 'confirmed' | 'rejected'
+export type DonationMethod = 'GCash' | 'GoTyme' | 'Bank Transfer' | 'Cash / Walk-in' | 'In-kind Donation'
+export type MessageKind = 'contact' | 'adoption' | 'donation' | 'staff'
 
 export type Profile = {
   id: string
@@ -21,6 +22,7 @@ export type Profile = {
   email: string | null
   role: UserRole
   status: AccountStatus
+  created_at: string
 }
 
 export type Dog = {
@@ -70,6 +72,11 @@ export type Donation = {
   method: DonationMethod
   message: string
   dog_id: string | null
+  status: DonationStatus
+  reference_no: string
+  receipt_path: string
+  anonymous: boolean
+  decided_at: string | null
   created_at: string
 }
 

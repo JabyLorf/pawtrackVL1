@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { canHavePuppies, daysIn, statusClass } from '../lib/utils'
@@ -65,7 +66,7 @@ export function DogPeek({
             ) : null}
             <b>{dog.name}</b>
           </div>
-          <button className="chat-x" type="button" onClick={onClose} aria-label="Close">×</button>
+          <button className="chat-x" type="button" onClick={onClose} aria-label="Close"><X size={18} /></button>
         </div>
         <div className="dog-peek-body">
           <div className="dog-peek-top">
