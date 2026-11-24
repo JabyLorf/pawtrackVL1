@@ -1,0 +1,12 @@
+// Cloudflare Workers hosting for the PawTrack website (static files only).
+// Cloudflare runs `npm run build`, then `npx wrangler deploy` uploads dist/.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pawtrack",
+  "compatibility_date": "2025-11-01",
+  "assets": {
+    "directory": "./dist",
+    // Send links like /donate or /ops/inbox to the React app instead of a 404.
+    "not_found_handling": "single-page-application"
+  }
+}
