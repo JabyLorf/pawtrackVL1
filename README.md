@@ -34,9 +34,10 @@ update public.profiles
 | donations | Auto-accepted gifts |
 | inbox_messages | Shared staff/admin inbox |
 | activity_log | Shelter activity |
-| posts, comments, post_likes, comment_likes, follows, notifications, reports, reposts, chat_messages | Community |
 
-Storage buckets: `dog-photos` (public), `avatars` (public), `post-media` (public), `id-photos` (private, staff can read).
+Storage buckets: `dog-photos` (public), `id-photos` (private, staff can read).
+
+**Upgrading an existing database?** If you set up Supabase with an older version that had the Community feature, also run `supabase/remove-community.sql` to drop the community tables. It permanently deletes posts, comments, likes, follows and chats.
 
 ## 2. Run the React app
 

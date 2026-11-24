@@ -31,14 +31,14 @@ export function LoginPage() {
     if (err) { setError(err); return }
     const { data } = await supabase.auth.getUser()
     const id = data.user?.id
-    if (!id) { navigate('/community'); return }
+    if (!id) { navigate('/adopt'); return }
     const { data: p } = await supabase.from('profiles').select('role,status').eq('id', id).maybeSingle()
     if (p && (p.role === 'staff' || p.role === 'admin') && p.status === 'active') navigate('/ops')
-    else navigate('/community')
+    else navigate('/adopt')
   }
 
   return (
-    <AuthShell title="Welcome back" side="Log in as a community member to support Ormoc Strays Oasis.">
+    <AuthShell title="Welcome back" side="Log in to apply for adoption and support Ormoc Strays Oasis.">
       <form className="auth-card" onSubmit={submit}>
         <h1>Client login</h1>
         <label>Email</label>
@@ -115,7 +115,7 @@ export function SignupPage() {
     if (token.length !== 6) { setError('Enter the 6-digit code.'); return }
     const err = await verifySignupOtp(email.trim(), token)
     if (err) { setError(err); return }
-    navigate('/community')
+    navigate('/adopt')
   }
 
   async function resend() {
@@ -128,7 +128,7 @@ export function SignupPage() {
   }
 
   return (
-    <AuthShell title="Create your account" side="Join the PawTrack community. New members start as clients and verify with a 6-digit email code.">
+    <AuthShell title="Create your account" side="Create a PawTrack account to apply for adoption. New members verify with a 6-digit email code.">
       {step === 'form' ? (
         <form className="auth-card" onSubmit={submit}>
           <h1>Sign up</h1>

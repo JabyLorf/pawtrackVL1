@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { IconMenu } from './Icons'
 
 export function PublicLayout({ children }: { children: ReactNode }) {
-  const { profile, isStaff } = useAuth()
+  const { profile, isStaff, signOut } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [open, setOpen] = useState(false)
@@ -43,7 +43,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
               isStaff ? (
                 <NavLink className="btn btn-accent btn-sm btn-pill" to="/ops">Staff desk</NavLink>
               ) : (
-                <NavLink className="btn btn-accent btn-sm btn-pill" to="/community">Community</NavLink>
+                <button className="btn btn-accent btn-sm btn-pill" type="button" onClick={() => signOut().then(() => navigate('/'))}>Log out</button>
               )
             ) : (
               <>

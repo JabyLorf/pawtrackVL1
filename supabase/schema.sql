@@ -58,14 +58,6 @@ do $$ begin
   create type public.message_kind as enum ('contact', 'adoption', 'donation');
 exception when duplicate_object then null; end $$;
 
-do $$ begin
-  create type public.report_status as enum ('pending', 'resolved', 'dismissed');
-exception when duplicate_object then null; end $$;
-
-do $$ begin
-  create type public.media_type as enum ('photo', 'video');
-exception when duplicate_object then null; end $$;
-
 -- -----------------------------------------------------------------------------
 -- Profiles (1:1 with auth.users)
 -- -----------------------------------------------------------------------------
@@ -76,13 +68,6 @@ create table if not exists public.profiles (
   email text,
   role public.user_role not null default 'client',
   status public.account_status not null default 'active',
-  bio text not null default '',
-  avatar_url text not null default '',
-  avatar_hue integer not null default 200,
-  private_account boolean not null default false,
-  followers_count integer not null default 0,
-  following_count integer not null default 0,
-  likes_total integer not null default 0,
   created_at timestamptz not null default now()
 );
 
@@ -210,99 +195,6 @@ create table if not exists public.activity_log (
 );
 
 -- -----------------------------------------------------------------------------
--- Community
--- -----------------------------------------------------------------------------
-create table if not exists public.posts (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references public.profiles (id) on delete cascade,
-  media_url text not null default '',
-  media_type public.media_type not null default 'photo',
-  caption text not null default '',
-  likes_count integer not null default 0,
-  comments_count integer not null default 0,
-  reposts_count integer not null default 0,
-  hidden boolean not null default false,
-  created_at timestamptz not null default now()
-);
-
-create table if not exists public.comments (
-  id uuid primary key default gen_random_uuid(),
-  post_id uuid not null references public.posts (id) on delete cascade,
-  user_id uuid not null references public.profiles (id) on delete cascade,
-  parent_id uuid references public.comments (id) on delete cascade,
-  text text not null,
-  hidden boolean not null default false,
-  created_at timestamptz not null default now()
-);
-
-create table if not exists public.post_likes (
-  id uuid primary key default gen_random_uuid(),
-  post_id uuid not null references public.posts (id) on delete cascade,
-  user_id uuid not null references public.profiles (id) on delete cascade,
-  created_at timestamptz not null default now(),
-  unique (post_id, user_id)
-);
-
-create table if not exists public.comment_likes (
-  id uuid primary key default gen_random_uuid(),
-  comment_id uuid not null references public.comments (id) on delete cascade,
-  user_id uuid not null references public.profiles (id) on delete cascade,
-  created_at timestamptz not null default now(),
-  unique (comment_id, user_id)
-);
-
-create table if not exists public.follows (
-  id uuid primary key default gen_random_uuid(),
-  follower_id uuid not null references public.profiles (id) on delete cascade,
-  following_id uuid not null references public.profiles (id) on delete cascade,
-  created_at timestamptz not null default now(),
-  unique (follower_id, following_id),
-  check (follower_id <> following_id)
-);
-
-create table if not exists public.notifications (
-  id uuid primary key default gen_random_uuid(),
-  to_user_id uuid not null references public.profiles (id) on delete cascade,
-  from_user_id uuid references public.profiles (id) on delete set null,
-  text text not null,
-  type text not null default '',
-  post_id uuid references public.posts (id) on delete cascade,
-  dog_id uuid references public.dogs (id) on delete cascade,
-  read boolean not null default false,
-  created_at timestamptz not null default now()
-);
-
-create table if not exists public.reports (
-  id uuid primary key default gen_random_uuid(),
-  target text not null default 'post',
-  post_id uuid references public.posts (id) on delete cascade,
-  comment_id uuid references public.comments (id) on delete cascade,
-  user_id uuid references public.profiles (id) on delete set null,
-  reported_by uuid references public.profiles (id) on delete set null,
-  reason text not null default 'Spam',
-  status public.report_status not null default 'pending',
-  created_at timestamptz not null default now()
-);
-
-create table if not exists public.reposts (
-  id uuid primary key default gen_random_uuid(),
-  post_id uuid not null references public.posts (id) on delete cascade,
-  user_id uuid not null references public.profiles (id) on delete cascade,
-  created_at timestamptz not null default now(),
-  unique (post_id, user_id)
-);
-
-create table if not exists public.chat_messages (
-  id uuid primary key default gen_random_uuid(),
-  thread text not null,
-  from_id uuid not null references public.profiles (id) on delete cascade,
-  text text not null,
-  created_at timestamptz not null default now()
-);
-
-create index if not exists chat_thread_idx on public.chat_messages (thread, created_at);
-
--- -----------------------------------------------------------------------------
 -- Auth → profile
 -- -----------------------------------------------------------------------------
 create or replace function public.handle_new_user()
@@ -315,15 +207,14 @@ declare
   uname text;
 begin
   uname := coalesce(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1));
-  insert into public.profiles (id, username, display_name, email, role, status, avatar_hue)
+  insert into public.profiles (id, username, display_name, email, role, status)
   values (
     new.id,
     uname,
     coalesce(new.raw_user_meta_data->>'display_name', uname),
     new.email,
     'client',
-    'active',
-    floor(random() * 360)::int
+    'active'
   );
   return new;
 end;
@@ -456,10 +347,6 @@ begin
   update public.dogs
     set status = 'Adopted', owner_id = rec.user_id
     where id = rec.dog_id;
-  if rec.user_id is not null then
-    insert into public.notifications (to_user_id, text, type, dog_id)
-    values (rec.user_id, 'approved your adoption of this dog', 'adopt', rec.dog_id);
-  end if;
   insert into public.activity_log (text)
   values ('Adoption approved');
 end;
@@ -484,10 +371,6 @@ begin
   update public.dogs
     set status = 'Available'
     where id = rec.dog_id and status = 'Pending Adoption';
-  if rec.user_id is not null then
-    insert into public.notifications (to_user_id, text, type, dog_id)
-    values (rec.user_id, 'did not approve your adoption of this dog', 'adopt', rec.dog_id);
-  end if;
 end;
 $$;
 
@@ -500,15 +383,6 @@ alter table public.adoptions enable row level security;
 alter table public.donations enable row level security;
 alter table public.inbox_messages enable row level security;
 alter table public.activity_log enable row level security;
-alter table public.posts enable row level security;
-alter table public.comments enable row level security;
-alter table public.post_likes enable row level security;
-alter table public.comment_likes enable row level security;
-alter table public.follows enable row level security;
-alter table public.notifications enable row level security;
-alter table public.reports enable row level security;
-alter table public.reposts enable row level security;
-alter table public.chat_messages enable row level security;
 
 -- Profiles
 drop policy if exists "profiles are readable" on public.profiles;
@@ -577,107 +451,12 @@ drop policy if exists "staff write activity" on public.activity_log;
 create policy "staff write activity" on public.activity_log
   for insert with check (public.is_staff());
 
--- Community posts
-drop policy if exists "read unhidden posts" on public.posts;
-create policy "read unhidden posts" on public.posts
-  for select using (hidden = false or user_id = auth.uid() or public.is_staff());
-
-drop policy if exists "auth create posts" on public.posts;
-create policy "auth create posts" on public.posts
-  for insert with check (auth.uid() = user_id);
-
-drop policy if exists "own or staff posts" on public.posts;
-create policy "own or staff posts" on public.posts
-  for update using (user_id = auth.uid() or public.is_staff());
-
-drop policy if exists "read comments" on public.comments;
-create policy "read comments" on public.comments
-  for select using (hidden = false or user_id = auth.uid() or public.is_staff());
-
-drop policy if exists "auth comment" on public.comments;
-create policy "auth comment" on public.comments
-  for insert with check (auth.uid() = user_id);
-
-drop policy if exists "read likes" on public.post_likes;
-create policy "read likes" on public.post_likes for select using (true);
-
-drop policy if exists "auth like" on public.post_likes;
-create policy "auth like" on public.post_likes
-  for insert with check (auth.uid() = user_id);
-
-drop policy if exists "auth unlike" on public.post_likes;
-create policy "auth unlike" on public.post_likes
-  for delete using (auth.uid() = user_id);
-
-drop policy if exists "read comment likes" on public.comment_likes;
-create policy "read comment likes" on public.comment_likes for select using (true);
-
-drop policy if exists "auth comment like" on public.comment_likes;
-create policy "auth comment like" on public.comment_likes
-  for insert with check (auth.uid() = user_id);
-
-drop policy if exists "auth comment unlike" on public.comment_likes;
-create policy "auth comment unlike" on public.comment_likes
-  for delete using (auth.uid() = user_id);
-
-drop policy if exists "read follows" on public.follows;
-create policy "read follows" on public.follows for select using (true);
-
-drop policy if exists "auth follow" on public.follows;
-create policy "auth follow" on public.follows
-  for insert with check (auth.uid() = follower_id);
-
-drop policy if exists "auth unfollow" on public.follows;
-create policy "auth unfollow" on public.follows
-  for delete using (auth.uid() = follower_id);
-
-drop policy if exists "own notifications" on public.notifications;
-create policy "own notifications" on public.notifications
-  for select using (to_user_id = auth.uid() or public.is_staff());
-
-drop policy if exists "update own notifications" on public.notifications;
-create policy "update own notifications" on public.notifications
-  for update using (to_user_id = auth.uid());
-
-drop policy if exists "auth report" on public.reports;
-create policy "auth report" on public.reports
-  for insert with check (auth.uid() = reported_by);
-
-drop policy if exists "staff reports" on public.reports;
-create policy "staff reports" on public.reports
-  for all using (public.is_staff()) with check (public.is_staff());
-
-drop policy if exists "read reposts" on public.reposts;
-create policy "read reposts" on public.reposts for select using (true);
-
-drop policy if exists "auth repost" on public.reposts;
-create policy "auth repost" on public.reposts
-  for insert with check (auth.uid() = user_id);
-
-drop policy if exists "auth unrepost" on public.reposts;
-create policy "auth unrepost" on public.reposts
-  for delete using (auth.uid() = user_id);
-
-drop policy if exists "auth notify" on public.notifications;
-create policy "auth notify" on public.notifications
-  for insert with check (auth.uid() = from_user_id);
-
-drop policy if exists "read chats" on public.chat_messages;
-create policy "read chats" on public.chat_messages
-  for select using (auth.uid() is not null);
-
-drop policy if exists "auth chat" on public.chat_messages;
-create policy "auth chat" on public.chat_messages
-  for insert with check (auth.uid() = from_id);
-
 -- -----------------------------------------------------------------------------
 -- Storage buckets
 -- -----------------------------------------------------------------------------
 insert into storage.buckets (id, name, public)
 values
   ('dog-photos', 'dog-photos', true),
-  ('avatars', 'avatars', true),
-  ('post-media', 'post-media', true),
   ('id-photos', 'id-photos', false)
 on conflict (id) do nothing;
 
@@ -689,22 +468,6 @@ drop policy if exists "staff write dog photos" on storage.objects;
 create policy "staff write dog photos" on storage.objects
   for all using (bucket_id = 'dog-photos' and public.is_staff())
   with check (bucket_id = 'dog-photos' and public.is_staff());
-
-drop policy if exists "public read avatars" on storage.objects;
-create policy "public read avatars" on storage.objects
-  for select using (bucket_id = 'avatars');
-
-drop policy if exists "auth write avatars" on storage.objects;
-create policy "auth write avatars" on storage.objects
-  for insert with check (bucket_id = 'avatars' and auth.uid() is not null);
-
-drop policy if exists "public read posts media" on storage.objects;
-create policy "public read posts media" on storage.objects
-  for select using (bucket_id = 'post-media');
-
-drop policy if exists "auth write posts media" on storage.objects;
-create policy "auth write posts media" on storage.objects
-  for insert with check (bucket_id = 'post-media' and auth.uid() is not null);
 
 drop policy if exists "anyone upload id photos" on storage.objects;
 create policy "anyone upload id photos" on storage.objects
