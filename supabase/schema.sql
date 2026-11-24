@@ -6,6 +6,7 @@
 
 -- Extensions
 create extension if not exists "pgcrypto";
+create extension if not exists pg_cron;
 
 -- -----------------------------------------------------------------------------
 -- Enums
@@ -48,10 +49,15 @@ exception when duplicate_object then null; end $$;
 do $$ begin
   create type public.donation_method as enum (
     'GCash',
+    'GoTyme',
     'Bank Transfer',
     'Cash / Walk-in',
     'In-kind Donation'
   );
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type public.donation_status as enum ('pending', 'confirmed', 'rejected');
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -100,6 +106,8 @@ create table if not exists public.dogs (
   mother_id uuid references public.dogs (id) on delete set null,
   intake_at timestamptz not null default now(),
   died_at timestamptz,
+  deleted_at timestamptz, -- set when moved to Recently deleted (see purge job)
+  deleted_by uuid references public.profiles (id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -107,6 +115,7 @@ create table if not exists public.dogs (
 create index if not exists dogs_status_idx on public.dogs (status);
 create index if not exists dogs_mother_idx on public.dogs (mother_id);
 create index if not exists dogs_search_idx on public.dogs (name, age, color, sex);
+create index if not exists dogs_deleted_idx on public.dogs (deleted_at) where deleted_at is not null;
 
 create or replace function public.dogs_set_oso_id()
 returns trigger
@@ -160,9 +169,19 @@ create table if not exists public.donations (
   method public.donation_method not null default 'GCash',
   message text not null default '',
   dog_id uuid references public.dogs (id) on delete set null,
+  -- Donors submit after paying; staff confirm before it counts in totals.
+  status public.donation_status not null default 'pending',
+  reference_no text not null default '',
+  receipt_path text not null default '',
+  anonymous boolean not null default false,
+  decided_at timestamptz,
+  decided_by uuid references public.profiles (id) on delete set null,
+  thanked_at timestamptz,          -- thank-you email sent on submit (donation-confirmation.sql)
+  confirmed_email_at timestamptz,  -- thank-you email sent on confirm
   created_at timestamptz not null default now()
 );
 
+create index if not exists donations_status_idx on public.donations (status, created_at desc);
 create index if not exists donations_created_idx on public.donations (created_at desc);
 
 -- -----------------------------------------------------------------------------
@@ -415,20 +434,24 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  amt text := trim(to_char(new.amount, '999,999,999.00'));
 begin
   insert into public.inbox_messages (name, email, subject, body, kind, dog_id)
   values (
     new.name,
     new.email,
-    'Donation received: ₱' || trim(to_char(new.amount, '999,999,999.00')),
-    new.name || ' donated ₱' || trim(to_char(new.amount, '999,999,999.00')) ||
-      ' for ' || new.purpose || ' via ' || new.method::text ||
-      case when new.message <> '' then '. Note: ' || new.message else '.' end,
+    'Donation to confirm: ₱' || amt || ' via ' || new.method::text,
+    new.name || ' says they sent ₱' || amt || ' via ' || new.method::text ||
+      case when new.reference_no <> '' then ' (reference no. ' || new.reference_no || ')' else '' end ||
+      ' for ' || new.purpose || '.' ||
+      case when new.message <> '' then ' Note: ' || new.message else '' end ||
+      ' Check the payment, then confirm or reject it on the Donations page.',
     'donation',
     new.dog_id
   );
   insert into public.activity_log (text)
-  values ('Donation ₱' || trim(to_char(new.amount, '999,999,999.00')) || ' received');
+  values ('Donation of ₱' || amt || ' waiting for confirmation');
   return new;
 end;
 $$;
@@ -514,13 +537,23 @@ create policy "admin manage profiles" on public.profiles
   for all using (public.is_admin()) with check (public.is_admin());
 
 -- Dogs: public sees visible adoptable-ish rows; staff sees all
+-- Deleted dogs are invisible to normal queries (website and staff desk).
 drop policy if exists "public read visible dogs" on public.dogs;
 create policy "public read visible dogs" on public.dogs
-  for select using (visible = true);
+  for select using (visible = true and deleted_at is null);
 
 drop policy if exists "staff manage dogs" on public.dogs;
-create policy "staff manage dogs" on public.dogs
-  for all using (public.is_staff()) with check (public.is_staff());
+drop policy if exists "staff read dogs" on public.dogs;
+drop policy if exists "staff add dogs" on public.dogs;
+drop policy if exists "staff edit dogs" on public.dogs;
+create policy "staff read dogs" on public.dogs
+  for select using (public.is_staff() and deleted_at is null);
+create policy "staff add dogs" on public.dogs
+  for insert with check (public.is_staff());
+create policy "staff edit dogs" on public.dogs
+  for update using (public.is_staff() and deleted_at is null) with check (public.is_staff());
+-- No delete policy: dogs are only removed through delete/purge functions.
+
 
 -- Adoptions: anyone can apply; staff read and manage
 drop policy if exists "anyone apply adopt" on public.adoptions;
@@ -538,7 +571,7 @@ create policy "staff manage adoptions" on public.adoptions
 -- Donations
 drop policy if exists "anyone donate" on public.donations;
 create policy "anyone donate" on public.donations
-  for insert with check (true);
+  for insert with check (status = 'pending' and decided_at is null and decided_by is null);
 
 drop policy if exists "staff read donations" on public.donations;
 create policy "staff read donations" on public.donations
@@ -576,7 +609,8 @@ create policy "staff write activity" on public.activity_log
 insert into storage.buckets (id, name, public)
 values
   ('dog-photos', 'dog-photos', true),
-  ('id-photos', 'id-photos', false)
+  ('id-photos', 'id-photos', false),
+  ('donation-receipts', 'donation-receipts', false)
 on conflict (id) do nothing;
 
 drop policy if exists "public read dog photos" on storage.objects;
@@ -606,3 +640,165 @@ revoke execute on function public.decide_staff_application(uuid, boolean) from p
 grant execute on function public.staff_applications() to authenticated;
 grant execute on function public.decide_staff_application(uuid, boolean) to authenticated;
 grant execute on function public.username_available(text) to anon, authenticated;
+
+-- -----------------------------------------------------------------------------
+-- Recently deleted dogs (7 days, then purged daily) and deleting staff accounts
+-- -----------------------------------------------------------------------------
+create or replace function public.delete_dog(p_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  d public.dogs%rowtype;
+begin
+  if not public.is_admin() then raise exception 'Only administrators can delete dogs'; end if;
+  select * into d from public.dogs where id = p_id and deleted_at is null;
+  if d.id is null then raise exception 'Dog not found'; end if;
+  update public.dogs set deleted_at = now(), deleted_by = auth.uid() where id = p_id;
+  insert into public.activity_log (text) values ('Dog deleted: ' || d.name || ' (restorable for 7 days)');
+end;
+$$;
+
+create or replace function public.restore_dog(p_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  d public.dogs%rowtype;
+begin
+  if not public.is_admin() then raise exception 'Only administrators can restore dogs'; end if;
+  select * into d from public.dogs where id = p_id and deleted_at is not null;
+  if d.id is null then raise exception 'Dog not found in Recently deleted'; end if;
+  update public.dogs set deleted_at = null, deleted_by = null where id = p_id;
+  insert into public.activity_log (text) values ('Dog restored: ' || d.name);
+end;
+$$;
+
+-- Deleting for good right away, from the Recently deleted page.
+create or replace function public.purge_dog(p_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  d public.dogs%rowtype;
+begin
+  if not public.is_admin() then raise exception 'Only administrators can delete dogs'; end if;
+  select * into d from public.dogs where id = p_id and deleted_at is not null;
+  if d.id is null then raise exception 'Dog not found in Recently deleted'; end if;
+  delete from public.dogs where id = p_id;
+  insert into public.activity_log (text) values ('Dog permanently deleted: ' || d.name);
+end;
+$$;
+
+create or replace function public.deleted_dogs()
+returns table (
+  id uuid, name text, oso_id text, sex public.dog_sex, age public.dog_age, breed text,
+  status public.dog_status, photo_url text, deleted_at timestamptz, deleted_by_name text
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select d.id, d.name, d.oso_id, d.sex, d.age, d.breed, d.status, d.photo_url, d.deleted_at,
+         coalesce(p.display_name, '') as deleted_by_name
+  from public.dogs d
+  left join public.profiles p on p.id = d.deleted_by
+  where public.is_admin() and d.deleted_at is not null
+  order by d.deleted_at desc;
+$$;
+
+-- Daily clean-up, run by pg_cron.
+create or replace function public.purge_deleted_dogs()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  n integer;
+begin
+  delete from public.dogs where deleted_at < now() - interval '7 days';
+  get diagnostics n = row_count;
+  if n > 0 then
+    insert into public.activity_log (text) values (n || ' deleted dog(s) removed for good after 7 days');
+  end if;
+  return n;
+end;
+$$;
+
+select cron.unschedule('purge-deleted-dogs') where exists (select 1 from cron.job where jobname = 'purge-deleted-dogs');
+select cron.schedule('purge-deleted-dogs', '0 3 * * *', 'select public.purge_deleted_dogs()');
+
+-- Admins can delete staff and volunteer accounts (not other admins, not themselves).
+create or replace function public.delete_staff_account(p_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  p public.profiles%rowtype;
+begin
+  if not public.is_admin() then raise exception 'Only administrators can delete accounts'; end if;
+  if p_id = auth.uid() then raise exception 'You cannot delete your own account'; end if;
+  select * into p from public.profiles where id = p_id;
+  if p.id is null then raise exception 'Account not found'; end if;
+  if p.role = 'admin' then raise exception 'Administrator accounts cannot be deleted here'; end if;
+  delete from auth.users where id = p_id;
+  insert into public.activity_log (text) values ('Staff account deleted: ' || p.display_name);
+end;
+$$;
+
+revoke execute on function public.delete_dog(uuid) from public, anon;
+revoke execute on function public.restore_dog(uuid) from public, anon;
+revoke execute on function public.purge_dog(uuid) from public, anon;
+revoke execute on function public.deleted_dogs() from public, anon;
+revoke execute on function public.purge_deleted_dogs() from public, anon, authenticated;
+revoke execute on function public.delete_staff_account(uuid) from public, anon;
+grant execute on function public.delete_dog(uuid) to authenticated;
+grant execute on function public.restore_dog(uuid) to authenticated;
+grant execute on function public.purge_dog(uuid) to authenticated;
+grant execute on function public.deleted_dogs() to authenticated;
+grant execute on function public.delete_staff_account(uuid) to authenticated;
+
+-- Donation receipts (staff only) and confirming donations
+drop policy if exists "anyone upload donation receipts" on storage.objects;
+create policy "anyone upload donation receipts" on storage.objects
+  for insert with check (bucket_id = 'donation-receipts');
+
+drop policy if exists "staff read donation receipts" on storage.objects;
+create policy "staff read donation receipts" on storage.objects
+  for select using (bucket_id = 'donation-receipts' and public.is_staff());
+
+create or replace function public.decide_donation(p_id uuid, p_confirm boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  d public.donations%rowtype;
+begin
+  if not public.is_staff() then raise exception 'Only staff can confirm donations'; end if;
+  select * into d from public.donations where id = p_id;
+  if d.id is null then raise exception 'Donation not found'; end if;
+  update public.donations
+    set status = case when p_confirm then 'confirmed' else 'rejected' end::public.donation_status,
+        decided_at = now(),
+        decided_by = auth.uid()
+    where id = p_id;
+  insert into public.activity_log (text)
+  values (case when p_confirm then 'Donation confirmed: ₱' else 'Donation rejected: ₱' end
+          || trim(to_char(d.amount, '999,999,999.00')) || ' from ' || d.name);
+end;
+$$;
+
+revoke execute on function public.decide_donation(uuid, boolean) from public, anon;
+grant execute on function public.decide_donation(uuid, boolean) to authenticated;

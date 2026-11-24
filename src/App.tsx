@@ -10,6 +10,7 @@ import {
   AdoptedPage,
   AdoptionsPage,
   DashboardPage,
+  DeletedDogsPage,
   DogEditPage,
   DogsPage,
   DonationsPage,
@@ -44,6 +45,7 @@ export default function App() {
               <Route path="donations" element={<DonationsPage />} />
               <Route path="inbox" element={<InboxPage />} />
               <Route path="staff" element={<StaffAdminPage />} />
+              <Route path="deleted" element={<DeletedDogsPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

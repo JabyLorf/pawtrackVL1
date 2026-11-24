@@ -13,6 +13,7 @@ import {
   Plus,
   ShieldCheck,
   Stethoscope,
+  Trash2,
   Users,
   X,
 } from 'lucide-react'
@@ -28,12 +29,14 @@ export function OpsLayout() {
   const [unread, setUnread] = useState(0)
   const [pending, setPending] = useState(0)
   const [applications, setApplications] = useState(0)
+  const [donationsPending, setDonationsPending] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
     if (!isStaff) return
     supabase.from('inbox_messages').select('id', { count: 'exact', head: true }).eq('read', false).then(({ count }) => setUnread(count || 0))
     supabase.from('adoptions').select('id', { count: 'exact', head: true }).eq('status', 'pending').then(({ count }) => setPending(count || 0))
+    supabase.from('donations').select('id', { count: 'exact', head: true }).eq('status', 'pending').then(({ count }) => setDonationsPending(count || 0))
   }, [isStaff, location.pathname])
 
   useEffect(() => {
@@ -117,12 +120,13 @@ export function OpsLayout() {
         <Item to="/ops/adopted" label="Adopted" icon={<HeartHandshake size={18} />} />
         <Item to="/ops/mortality" label="Mortality" icon={<Stethoscope size={18} />} />
         <Item to="/ops/adoptions" label="Adoptions" icon={<ClipboardList size={18} />} badge={pending} />
-        <Item to="/ops/donations" label="Donations" icon={<HandCoins size={18} />} />
+        <Item to="/ops/donations" label="Donations" icon={<HandCoins size={18} />} badge={donationsPending} />
         <Item to="/ops/inbox" label="Inbox" icon={<Inbox size={18} />} badge={unread} />
         {isAdmin ? (
           <>
             <div className="ops-group">Administration</div>
             <Item to="/ops/staff" label="Staff & Volunteers" icon={<Users size={18} />} badge={applications} />
+            <Item to="/ops/deleted" label="Recently deleted" icon={<Trash2 size={18} />} />
           </>
         ) : null}
         <div className="ops-foot">

@@ -11,6 +11,9 @@
 //     person who wrote in and records it in public.inbox_replies.
 //     Only active staff/admins can do this.
 //
+//  3. {"donation_id": "...", "event": "received" | "confirmed"}  — sent by a
+//     database trigger. Emails the donor a thank-you (once per event).
+//
 // Secrets (Supabase dashboard → Edge Functions → Secrets):
 //   GMAIL_APP_PASSWORD  App password of the admin Gmail (recommended). Emails
 //                       are sent through smtp.gmail.com as ADMIN_EMAIL, so both
@@ -159,6 +162,67 @@ Deno.serve(async (req) => {
       .single()
     await db.from('inbox_messages').update({ read: true }).eq('id', msg.id)
     return json({ sent: true, reply: saved })
+  }
+
+  // ---- 3. Thank-you email to a donor --------------------------------------
+  if (input.donation_id) {
+    const donationId = String(input.donation_id)
+    const event = input.event === 'confirmed' ? 'confirmed' : 'received'
+    const column = event === 'confirmed' ? 'confirmed_email_at' : 'thanked_at'
+    // Claim it so each email goes out once, and only in the right state.
+    let q = db.from('donations').update({ [column]: new Date().toISOString() }).eq('id', donationId).is(column, null)
+    q = event === 'confirmed' ? q.eq('status', 'confirmed') : q.neq('status', 'rejected')
+    const { data: d, error: claimErr } = await q.select('*').maybeSingle()
+    if (claimErr) return json({ error: claimErr.message }, 500)
+    if (!d) return json({ skipped: true })
+    if (!looksLikeEmail(d.email)) return json({ skipped: true })
+
+    const amount = '₱' + Number(d.amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const who = d.anonymous || !d.name || d.name === 'Anonymous' ? 'friend' : String(d.name).split(' ')[0]
+    const ref = d.reference_no ? ` (reference no. ${d.reference_no})` : ''
+    const subject = event === 'confirmed'
+      ? 'Your donation to Ormoc Strays Oasis is confirmed'
+      : 'Thank you for your donation to Ormoc Strays Oasis'
+    const lines = event === 'confirmed'
+      ? [
+          `Dear ${who},`,
+          '',
+          `We have received your donation of ${amount} via ${d.method}${ref}. Thank you!`,
+          `It will go to: ${d.purpose}.`,
+          '',
+          'Every peso helps us feed, treat and rehome the dogs at the Ormoc City Dog Pound. Because of you, they get a second chance.',
+          '',
+          'With gratitude,',
+          'The Ormoc Strays Oasis team',
+        ]
+      : [
+          `Dear ${who},`,
+          '',
+          `Thank you for your donation of ${amount} via ${d.method}${ref}!`,
+          'Our staff will check it against the payment record and confirm it shortly. We will email you again once it is confirmed.',
+          '',
+          'From all of us and the dogs in our care, thank you for your kindness.',
+          '',
+          'With gratitude,',
+          'The Ormoc Strays Oasis team',
+        ]
+    const err = await sendMail({
+      to: d.email.trim(),
+      replyTo: ADMIN_EMAIL,
+      subject,
+      text: lines.join('\n'),
+      html: layout(
+        event === 'confirmed' ? 'Donation confirmed' : 'Thank you',
+        subject,
+        lines.map((l) => (l ? `<p style="margin:0 0 10px">${esc(l)}</p>` : '')).join(''),
+        'Ormoc Strays Oasis · Brgy. Cagbuhangin, Ormoc City · Reply to this email if you have any questions.',
+      ),
+    })
+    if (err) {
+      await db.from('donations').update({ [column]: null }).eq('id', donationId)
+      return json({ error: err }, 502)
+    }
+    return json({ sent: true })
   }
 
   // ---- 1. New message notification -----------------------------------------

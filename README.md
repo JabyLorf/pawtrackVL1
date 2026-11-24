@@ -56,7 +56,7 @@ Storage buckets: `dog-photos` (public), `id-photos` (private, staff can read).
 
 **Upgrading an existing database?** If you set up Supabase with an older version that had the Community feature, also run `supabase/remove-community.sql` to drop the community tables. It permanently deletes posts, comments, likes, follows and chats.
 
-If that older database still had client sign-up, also run `supabase/remove-clients.sql`. Then run `supabase/staff-applications.sql` to add staff applications and admin approval. Client accounts become pending staff with no access, and the client links on dogs and adoptions are dropped.
+If that older database still had client sign-up, also run `supabase/remove-clients.sql`. Then run `supabase/staff-applications.sql` to add staff applications and admin approval. Then `supabase/donation-confirmation.sql` so donations wait for staff confirmation before they count. Then `supabase/deleted-dogs.sql` for Recently deleted dogs (kept 7 days, purged daily by pg_cron) and deleting staff accounts. Client accounts become pending staff with no access, and the client links on dogs and adoptions are dropped.
 
 ## 2. Run the React app
 
