@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { supabase } from '../lib/supabase'
+import { authMessage, supabase } from '../lib/supabase'
 import type { Profile } from '../types'
 
 type AuthState = {
@@ -60,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async signIn(email, password) {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
-        return error ? error.message : null
+        return authMessage(error)
       },
       async signUp(email, password, username, name) {
         const { error } = await supabase.auth.signUp({
@@ -68,15 +68,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password,
           options: { data: { username, display_name: name } },
         })
-        return error ? error.message : null
+        return authMessage(error)
       },
       async verifySignupOtp(email, token) {
         const { error } = await supabase.auth.verifyOtp({ email, token, type: 'signup' })
-        return error ? error.message : null
+        return authMessage(error)
       },
       async resendSignupOtp(email) {
         const { error } = await supabase.auth.resend({ type: 'signup', email })
-        return error ? error.message : null
+        return authMessage(error)
       },
       async signOut() {
         await supabase.auth.signOut()

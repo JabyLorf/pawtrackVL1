@@ -27,3 +27,17 @@ export function publicUrl(bucket: string, path: string) {
   const { data } = supabase.storage.from(bucket).getPublicUrl(path)
   return data.publicUrl
 }
+
+/**
+ * A readable message for a Supabase Auth error. Email-sending failures come
+ * back as a 500 with an empty message ("{}"), so they get a plain explanation.
+ */
+export function authMessage(error: { message?: string; status?: number } | null | undefined) {
+  if (!error) return null
+  const msg = (error.message || '').trim()
+  if (/rate limit|security purposes/i.test(msg)) return 'Too many tries. Please wait a few minutes, then try again.'
+  if (!msg || msg === '{}' || (error.status ?? 0) >= 500 || /sending .*email|smtp/i.test(msg)) {
+    return "We couldn't send the email right now. Please try again later, or contact an administrator."
+  }
+  return msg
+}

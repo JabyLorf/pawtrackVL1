@@ -19,7 +19,7 @@ import {
   Users,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { authMessage, supabase } from '../lib/supabase'
 import { PASSWORD_RULES, passwordOk } from '../lib/utils'
 import { useConfirm } from '../components/ConfirmDialog'
 
@@ -193,10 +193,7 @@ function ForgotPassword({ initialEmail, onDone, onBack }: {
     setBusy(true)
     const { error: err } = await supabase.auth.resetPasswordForEmail(addr)
     setBusy(false)
-    if (err) {
-      setError(/rate limit|security purposes/i.test(err.message) ? 'Too many tries. Please wait a few minutes, then try again.' : err.message)
-      return
-    }
+    if (err) { setError(authMessage(err) || ''); return }
     setNote(`If ${addr} has a staff account, we sent it a reset code.`)
     setCode('')
     setStep('reset')
@@ -205,11 +202,11 @@ function ForgotPassword({ initialEmail, onDone, onBack }: {
   async function change() {
     const addr = email.trim()
     const { error: vErr } = await supabase.auth.verifyOtp({ email: addr, token: code, type: 'recovery' })
-    if (vErr) return /expired|invalid/i.test(vErr.message) ? 'That code is wrong or has expired. Check the email or send a new code.' : vErr.message
+    if (vErr) return /expired|invalid/i.test(vErr.message) ? 'That code is wrong or has expired. Check the email or send a new code.' : authMessage(vErr)
     const { error: uErr } = await supabase.auth.updateUser({ password })
     // Always end signed out: the person signs in again with the new password.
     await supabase.auth.signOut()
-    if (uErr) return /different from the old/i.test(uErr.message) ? 'Choose a password different from your old one.' : uErr.message
+    if (uErr) return /different from the old/i.test(uErr.message) ? 'Choose a password different from your old one.' : authMessage(uErr)
     onDone()
     return null
   }
