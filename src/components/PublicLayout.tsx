@@ -43,7 +43,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
   )
 
   return (
-    <div>
+    <div className="site-shell">
       <header className="site-nav">
         <div className="container">
           <button className="oso-brand" type="button" onClick={() => navigate('/')}>

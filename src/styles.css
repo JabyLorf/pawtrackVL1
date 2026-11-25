@@ -562,3 +562,7 @@ fieldset.plain:disabled { opacity: .65; }
 .app-cta .btn-ghost-light { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.45); }
 .app-cta .btn-ghost-light:hover { background: rgba(255,255,255,.1); }
 .foot-app { display: grid; gap: .45rem; justify-items: start; }
+
+/* Keep the footer at the bottom of the screen on short pages */
+.site-shell { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
+.site-shell > .site-footer { margin-top: auto; }
