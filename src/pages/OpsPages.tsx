@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { ago, dogMatches, inCare, peso, statusClass } from '../lib/utils'
@@ -9,8 +9,8 @@ import { DogPhoto } from '../components/DogCard'
 import { useDevice } from '../context/DeviceContext'
 import { useAuth } from '../context/AuthContext'
 import { Modal } from '../components/Modal'
-import { ConfirmDialog } from '../components/ConfirmDialog'
-import { ClipboardList, HandCoins, HeartHandshake, Inbox, PawPrint, Stethoscope, Syringe, Tag, UserCheck, UserX, X, Reply, Users, Check, Loader2, Send, Trash2, RotateCcw, Plus, CheckCircle2, Image as ImageIcon } from 'lucide-react'
+import { ConfirmDialog, useConfirm } from '../components/ConfirmDialog'
+import { ClipboardList, HandCoins, HeartHandshake, Inbox, PawPrint, Stethoscope, Syringe, Tag, UserCheck, UserX, X, Reply, Users, Check, Loader2, Send, Trash2, RotateCcw, Plus, CheckCircle2, Image as ImageIcon, Pencil } from 'lucide-react'
 
 function Kpi({ icon, n, l, tone }: { icon: ReactNode; n: ReactNode; l: string; tone?: 'warn' | 'muted' }) {
   return (
@@ -219,6 +219,7 @@ function Flash({ text, onClose }: { text: string; onClose: () => void }) {
 }
 
 export function DogsPage() {
+  const { confirm, dialog } = useConfirm()
   const [dogs, setDogs] = useState<Dog[]>([])
   const [q, setQ] = useState('')
   const navigate = useNavigate()
@@ -256,16 +257,29 @@ export function DogsPage() {
         onChanged={load}
         extra={(d) => (
           <>
-            <button className="btn btn-ghost" type="button" onClick={() => mark(d.id, 'Adopted')}>Mark adopted</button>
-            <button className="btn btn-ghost" type="button" onClick={() => mark(d.id, 'Deceased')}>Mark deceased</button>
+            <button className="btn btn-ghost" type="button" onClick={() => confirm({
+              title: `Mark ${d.name} as adopted?`,
+              body: `${d.name} moves to the Adopted list and is no longer listed for adoption.`,
+              confirmLabel: 'Mark adopted',
+              action: () => mark(d.id, 'Adopted'),
+            })}>Mark adopted</button>
+            <button className="btn btn-ghost" type="button" onClick={() => confirm({
+              title: `Mark ${d.name} as deceased?`,
+              body: `${d.name} moves to Mortality records and is removed from the adoption list.`,
+              confirmLabel: 'Mark deceased',
+              danger: true,
+              action: () => mark(d.id, 'Deceased'),
+            })}>Mark deceased</button>
           </>
         )}
       />
+      {dialog}
     </div>
   )
 }
 
 export function AdoptedPage() {
+  const { confirm, dialog } = useConfirm()
   const [dogs, setDogs] = useState<Dog[]>([])
   async function load() {
     const { data } = await supabase.from('dogs').select('*').eq('status', 'Adopted')
@@ -280,12 +294,19 @@ export function AdoptedPage() {
     <div>
       <h1 className="page-h1">Adopted</h1>
       <p className="page-sub">Dogs that have been adopted.</p>
-      <DogTable list={dogs} onChanged={load} extra={(d) => <button className="btn btn-ghost" type="button" onClick={() => restore(d.id)}>Back to available</button>} />
+      <DogTable list={dogs} onChanged={load} extra={(d) => <button className="btn btn-ghost" type="button" onClick={() => confirm({
+        title: `Make ${d.name} available again?`,
+        body: `${d.name} goes back to the Pet Register and the adoption list.`,
+        confirmLabel: 'Make available',
+        action: () => restore(d.id),
+      })}>Back to available</button>} />
+      {dialog}
     </div>
   )
 }
 
 export function MortalityPage() {
+  const { confirm, dialog } = useConfirm()
   const [dogs, setDogs] = useState<Dog[]>([])
   async function load() {
     const { data } = await supabase.from('dogs').select('*').eq('status', 'Deceased')
@@ -300,7 +321,13 @@ export function MortalityPage() {
     <div>
       <h1 className="page-h1">Mortality</h1>
       <p className="page-sub">Deceased dogs are kept here and are not listed for adoption.</p>
-      <DogTable list={dogs} onChanged={load} extra={(d) => <button className="btn btn-ghost" type="button" onClick={() => restore(d.id)}>Back to available</button>} />
+      <DogTable list={dogs} onChanged={load} extra={(d) => <button className="btn btn-ghost" type="button" onClick={() => confirm({
+        title: `Make ${d.name} available again?`,
+        body: `${d.name} goes back to the Pet Register and the adoption list.`,
+        confirmLabel: 'Make available',
+        action: () => restore(d.id),
+      })}>Back to available</button>} />
+      {dialog}
     </div>
   )
 }
@@ -317,6 +344,7 @@ function daysLeft(deletedAt: string) {
 }
 
 export function DeletedDogsPage() {
+  const { confirm, dialog } = useConfirm()
   const { isAdmin } = useAuth()
   const [rows, setRows] = useState<DeletedDog[]>([])
   const [loaded, setLoaded] = useState(false)
@@ -372,7 +400,12 @@ export function DeletedDogsPage() {
               </div>
             </div>
             <div className="dog-row-actions">
-              <button className="btn btn-primary btn-sm" type="button" disabled={busy === d.id} onClick={() => restore(d)}>
+              <button className="btn btn-primary btn-sm" type="button" disabled={busy === d.id} onClick={() => confirm({
+                title: `Restore ${d.name}?`,
+                body: `${d.name}'s profile goes back to the staff desk and the website.`,
+                confirmLabel: 'Restore',
+                action: () => restore(d),
+              })}>
                 {busy === d.id ? <><Loader2 size={15} className="spin" /> Restoring…</> : <><RotateCcw size={15} /> Restore</>}
               </button>
               <button className="btn btn-remove" type="button" disabled={busy === d.id} onClick={() => setPurge(d)}>
@@ -394,11 +427,13 @@ export function DeletedDogsPage() {
           This can't be undone. {purge.name}'s profile and adoption applications will be removed permanently.
         </ConfirmDialog>
       ) : null}
+      {dialog}
     </div>
   )
 }
 
 export function DogEditPage() {
+  const { confirm, dialog } = useConfirm()
   const { id } = useParams()
   const navigate = useNavigate()
   const isNew = !id || id === 'new'
@@ -426,8 +461,7 @@ export function DogEditPage() {
     supabase.from('dogs').select('*').eq('mother_id', id).then(({ data }) => setPups((data as Dog[]) || []))
   }, [id, isNew])
 
-  async function save(e: FormEvent) {
-    e.preventDefault()
+  async function save() {
     if (busy.current) return
     if (!dog.name?.trim()) { setError('Name is required.'); return }
     busy.current = true
@@ -476,8 +510,7 @@ export function DogEditPage() {
     }
   }
 
-  async function addPuppy(e: FormEvent) {
-    e.preventDefault()
+  async function addPuppy() {
     if (!id || isNew || !pupName.trim() || busy.current) return
     busy.current = true
     setAddingPup(true)
@@ -499,7 +532,21 @@ export function DogEditPage() {
     <div>
       <button className="link" type="button" onClick={() => navigate(-1)}>← Back</button>
       <h1 className="page-h1">{isNew ? 'Add a dog' : `Edit ${dog.name || 'dog'}`}</h1>
-      <form className="admin-form" onSubmit={save} aria-busy={saving}>
+      <form
+        className="admin-form"
+        aria-busy={saving}
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!dog.name?.trim()) { setError('Name is required.'); return }
+          confirm({
+            title: isNew ? `Add ${dog.name.trim()}?` : `Save changes to ${dog.name.trim()}?`,
+            body: isNew ? 'The dog will be added to the Pet Register.' : 'The profile will be updated on the staff desk and the website.',
+            confirmLabel: isNew ? 'Add dog' : 'Save changes',
+            busyLabel: 'Saving…',
+            action: save,
+          })
+        }}
+      >
         <fieldset className="plain" disabled={saving}>
         {dog.photo_url ? <img src={dog.photo_url} alt="" style={{ width: 160, aspectRatio: '1', objectFit: 'cover', borderRadius: 12 }} /> : null}
         <label>Photo</label>
@@ -566,17 +613,32 @@ export function DogEditPage() {
         <div className="panel" style={{ marginTop: 16, maxWidth: 720 }}>
           <h3>Her puppies</h3>
           {pups.map((p) => <p key={p.id}><Link to={`/ops/dogs/${p.id}`}>{p.name}</Link> · {p.status}</p>)}
-          <form onSubmit={addPuppy} className="row wrap" style={{ marginTop: 10 }}>
+          <form
+            className="row wrap"
+            style={{ marginTop: 10 }}
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (!pupName.trim()) return
+              confirm({
+                title: `Add puppy ${pupName.trim()}?`,
+                body: `${pupName.trim()} will be added as ${dog.name}'s puppy.`,
+                confirmLabel: 'Add puppy',
+                action: addPuppy,
+              })
+            }}
+          >
             <input placeholder="Puppy name" value={pupName} onChange={(e) => setPupName(e.target.value)} disabled={addingPup} />
             <button className="btn btn-primary" type="submit" disabled={addingPup}>{addingPup ? <><Loader2 size={16} className="spin" /> Adding…</> : 'Add puppy'}</button>
           </form>
         </div>
       ) : null}
+      {dialog}
     </div>
   )
 }
 
 export function AdoptionsPage() {
+  const { confirm, dialog } = useConfirm()
   const [rows, setRows] = useState<(Adoption & { dogs?: { name: string } | null })[]>([])
   const [peek, setPeek] = useState<Adoption | null>(null)
   const [idUrl, setIdUrl] = useState('')
@@ -625,8 +687,19 @@ export function AdoptionsPage() {
                 <button className="btn btn-ghost" type="button" onClick={() => open(a)}>View</button>
                 {pending ? (
                   <>
-                    <button className="btn btn-primary btn-sm" type="button" onClick={() => decide(a.id, 'approve')}>Approve</button>
-                    <button className="btn btn-remove" type="button" onClick={() => decide(a.id, 'reject')}>Reject</button>
+                    <button className="btn btn-primary btn-sm" type="button" onClick={() => confirm({
+                      title: `Approve ${a.applicant}'s application?`,
+                      body: `${a.dogs?.name || 'The dog'} will be marked as adopted, and any other pending requests for this dog will be closed.`,
+                      confirmLabel: 'Approve',
+                      action: () => decide(a.id, 'approve'),
+                    })}>Approve</button>
+                    <button className="btn btn-remove" type="button" onClick={() => confirm({
+                      title: `Reject ${a.applicant}'s application?`,
+                      body: `The application for ${a.dogs?.name || 'this dog'} will be marked as rejected.`,
+                      confirmLabel: 'Reject',
+                      danger: true,
+                      action: () => decide(a.id, 'reject'),
+                    })}>Reject</button>
                   </>
                 ) : null}
               </div>
@@ -656,8 +729,19 @@ export function AdoptionsPage() {
                     <button className="btn btn-ghost" type="button" onClick={() => open(a)}>View</button>
                     {pending ? (
                       <>
-                        <button className="btn btn-coral" type="button" onClick={() => decide(a.id, 'approve')}>Approve</button>
-                        <button className="btn btn-ghost" type="button" onClick={() => decide(a.id, 'reject')}>Reject</button>
+                        <button className="btn btn-coral" type="button" onClick={() => confirm({
+                      title: `Approve ${a.applicant}'s application?`,
+                      body: `${a.dogs?.name || 'The dog'} will be marked as adopted, and any other pending requests for this dog will be closed.`,
+                      confirmLabel: 'Approve',
+                      action: () => decide(a.id, 'approve'),
+                    })}>Approve</button>
+                        <button className="btn btn-ghost" type="button" onClick={() => confirm({
+                      title: `Reject ${a.applicant}'s application?`,
+                      body: `The application for ${a.dogs?.name || 'this dog'} will be marked as rejected.`,
+                      confirmLabel: 'Reject',
+                      danger: true,
+                      action: () => decide(a.id, 'reject'),
+                    })}>Reject</button>
                       </>
                     ) : null}
                   </div>
@@ -696,13 +780,85 @@ export function AdoptionsPage() {
           </div>
         </Modal>
       ) : null}
+      {dialog}
     </div>
   )
 }
 
+type DonationEdit = { amount: number; method: string; reference: string; name: string; email: string; purpose: string }
+
+const DONATION_METHODS = ['GCash', 'GoTyme', 'Bank Transfer', 'Cash / Walk-in', 'In-kind Donation']
+const DONATION_PURPOSES = ['General Fund', 'Dog Food & Supplies', 'Veterinary Care', 'Spay & Neuter Program', 'Shelter Upkeep']
+
+function EditDonation({ d, onClose, onSave }: { d: Donation; onClose: () => void; onSave: (next: DonationEdit) => void }) {
+  const [amount, setAmount] = useState(String(Math.round(Number(d.amount))))
+  const [method, setMethod] = useState<string>(d.method)
+  const [reference, setReference] = useState(d.reference_no || '')
+  const [name, setName] = useState(d.anonymous || d.name === 'Anonymous' ? '' : d.name)
+  const [email, setEmail] = useState(d.email || '')
+  const [purpose, setPurpose] = useState(d.purpose)
+  const [error, setError] = useState('')
+
+  return (
+    <Modal onClose={onClose}>
+      <div className="create-head"><b>Edit donation</b><button className="chat-x" type="button" onClick={onClose} aria-label="Close"><X size={18} /></button></div>
+      <form
+        className="adopt-card-body"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!/^[1-9]\d{0,5}$/.test(amount)) { setError('Amount must be a whole number from 1 to 999,999.'); return }
+          setError('')
+          onSave({ amount: Number(amount), method, reference: reference.trim(), name: name.trim(), email: email.trim(), purpose })
+        }}
+      >
+        <p className="muted">Fix a mistake in what the donor entered. Changes are recorded in the activity log.</p>
+        <label htmlFor="e-amount">Amount *</label>
+        <div className="peso-input">
+          <span aria-hidden="true">₱</span>
+          <input id="e-amount" inputMode="numeric" value={amount}
+            onChange={(e) => setAmount(e.target.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 6))} />
+        </div>
+        <div className="form-grid">
+          <div>
+            <label htmlFor="e-method">Paid with</label>
+            <select id="e-method" value={method} onChange={(e) => setMethod(e.target.value)}>
+              {DONATION_METHODS.map((m) => <option key={m}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="e-ref">Reference no.</label>
+            <input id="e-ref" value={reference} onChange={(e) => setReference(e.target.value)} />
+          </div>
+          <div>
+            <label htmlFor="e-name">Donor name <span className="muted">(blank = Anonymous)</span></label>
+            <input id="e-name" value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div>
+            <label htmlFor="e-email">Email</label>
+            <input id="e-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div className="full">
+            <label htmlFor="e-purpose">Purpose</label>
+            <select id="e-purpose" value={purpose} onChange={(e) => setPurpose(e.target.value)}>
+              {DONATION_PURPOSES.map((p) => <option key={p}>{p}</option>)}
+            </select>
+          </div>
+        </div>
+        {error ? <p className="err">{error}</p> : null}
+        <div className="dialog-actions">
+          <button className="btn btn-light" type="button" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" type="submit">Save changes</button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
 export function DonationsPage() {
+  const { confirm, dialog } = useConfirm()
   const [rows, setRows] = useState<Donation[]>([])
-  const [busy, setBusy] = useState<string | null>(null)
+  const { isAdmin } = useAuth()
+  const [editing, setEditing] = useState<Donation | null>(null)
   const [reject, setReject] = useState<Donation | null>(null)
   const [receiptUrl, setReceiptUrl] = useState('')
   const [flash, setFlash] = useState('')
@@ -720,14 +876,6 @@ export function DonationsPage() {
     setFlash(confirm ? `${peso(Number(d.amount))} from ${d.name} confirmed.` : `${peso(Number(d.amount))} from ${d.name} rejected.`)
     load()
     return null
-  }
-
-  async function confirmNow(d: Donation) {
-    if (busy) return
-    setBusy(d.id)
-    const err = await decide(d, true)
-    setBusy(null)
-    if (err) setFlash(err)
   }
 
   async function openReceipt(d: Donation) {
@@ -755,17 +903,23 @@ export function DonationsPage() {
           {d.message ? <div className="dog-row-note">{d.message}</div> : null}
         </div>
       </div>
-      {actions || d.receipt_path ? (
+      {actions || d.receipt_path || isAdmin ? (
         <div className="dog-row-actions">
           {d.receipt_path ? <button className="btn btn-ghost" type="button" onClick={() => openReceipt(d)}><ImageIcon size={14} /> Receipt</button> : null}
           {actions ? (
             <>
-              <button className="btn btn-primary btn-sm" type="button" disabled={busy === d.id} onClick={() => confirmNow(d)}>
-                {busy === d.id ? <><Loader2 size={15} className="spin" /> Confirming…</> : <><Check size={15} /> Confirm</>}
+              <button className="btn btn-primary btn-sm" type="button" onClick={() => confirm({
+                title: `Confirm ${peso(Number(d.amount))} from ${d.name}?`,
+                body: <>Only confirm if you found this payment{d.reference_no ? <> with reference <b>{d.reference_no}</b></> : null} in {d.method}. It will be added to the totals{d.email ? ' and the donor will get a thank-you email' : ''}.</>,
+                confirmLabel: 'Confirm donation',
+                action: () => decide(d, true),
+              })}>
+                <Check size={15} /> Confirm
               </button>
-              <button className="btn btn-remove" type="button" disabled={busy === d.id} onClick={() => setReject(d)}><X size={14} /> Reject</button>
+              <button className="btn btn-remove" type="button" onClick={() => setReject(d)}><X size={14} /> Reject</button>
             </>
           ) : null}
+          {isAdmin ? <button className="btn btn-ghost" type="button" onClick={() => setEditing(d)}><Pencil size={14} /> Edit</button> : null}
         </div>
       ) : null}
     </div>
@@ -781,7 +935,12 @@ export function DonationsPage() {
           {list.length ? list.map((d) => (
             <tr key={d.id}>
               <td>{d.name}</td><td>{peso(Number(d.amount))}</td><td>{d.method}</td><td>{d.reference_no || '—'}</td><td>{d.purpose}</td><td>{ago(d.created_at)}</td>
-              <td>{d.receipt_path ? <button className="btn btn-ghost" type="button" onClick={() => openReceipt(d)}><ImageIcon size={14} /> Receipt</button> : null}</td>
+              <td>
+                <div className="inline">
+                  {d.receipt_path ? <button className="btn btn-ghost" type="button" onClick={() => openReceipt(d)}><ImageIcon size={14} /> Receipt</button> : null}
+                  {isAdmin ? <button className="btn btn-ghost" type="button" onClick={() => setEditing(d)}><Pencil size={14} /> Edit</button> : null}
+                </div>
+              </td>
             </tr>
           )) : <tr><td colSpan={7} className="empty">{empty}</td></tr>}
         </tbody>
@@ -837,6 +996,35 @@ export function DonationsPage() {
           <div className="adopt-card-body"><img src={receiptUrl} alt="Donation receipt" style={{ width: '100%', borderRadius: 10 }} /></div>
         </Modal>
       ) : null}
+      {editing ? (
+        <EditDonation
+          d={editing}
+          onClose={() => setEditing(null)}
+          onSave={(next) => confirm({
+            title: 'Save changes to this donation?',
+            body: <>The donation will be updated to <b>{peso(next.amount)}</b> from <b>{next.name || 'Anonymous'}</b>{next.reference ? <> (ref {next.reference})</> : null}. This is recorded in the activity log.</>,
+            confirmLabel: 'Save changes',
+            busyLabel: 'Saving…',
+            action: async () => {
+              const { error } = await supabase.rpc('update_donation', {
+                p_id: editing.id,
+                p_amount: next.amount,
+                p_method: next.method,
+                p_reference: next.reference,
+                p_name: next.name,
+                p_email: next.email,
+                p_purpose: next.purpose,
+              })
+              if (error) return error.message
+              setEditing(null)
+              setFlash('Donation updated.')
+              load()
+              return null
+            },
+          })}
+        />
+      ) : null}
+      {dialog}
     </div>
   )
 }
@@ -854,6 +1042,7 @@ function MessageCard({ m, replies, onRead, onReplied }: {
   onRead: (id: string) => void
   onReplied: (r: InboxReply) => void
 }) {
+  const { confirm, dialog } = useConfirm()
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
@@ -861,8 +1050,7 @@ function MessageCard({ m, replies, onRead, onReplied }: {
   const [sent, setSent] = useState(false)
   const busy = useRef(false)
 
-  async function send(e: FormEvent) {
-    e.preventDefault()
+  async function send() {
     if (busy.current || !text.trim()) return
     busy.current = true
     setSending(true)
@@ -906,7 +1094,20 @@ function MessageCard({ m, replies, onRead, onReplied }: {
       ))}
 
       {open ? (
-        <form className="msg-compose" onSubmit={send}>
+        <form
+          className="msg-compose"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (!text.trim()) return
+            confirm({
+              title: `Send this reply to ${m.name}?`,
+              body: `It will be emailed to ${m.email} from the PawTrack email.`,
+              confirmLabel: 'Send reply',
+              busyLabel: 'Sending…',
+              action: send,
+            })
+          }}
+        >
           <label className="sr-only" htmlFor={`reply-${m.id}`}>Reply to {m.name}</label>
           <textarea
             id={`reply-${m.id}`}
@@ -938,6 +1139,7 @@ function MessageCard({ m, replies, onRead, onReplied }: {
           {sent ? <span className="msg-sent"><Check size={14} /> Reply sent</span> : null}
         </div>
       )}
+      {dialog}
     </div>
   )
 }
@@ -979,6 +1181,7 @@ export function InboxPage() {
 }
 
 export function StaffAdminPage() {
+  const { confirm, dialog } = useConfirm()
   const { isAdmin, profile } = useAuth()
   const [team, setTeam] = useState<Profile[]>([])
   const [apps, setApps] = useState<Profile[]>([])
@@ -1023,10 +1226,21 @@ export function StaffAdminPage() {
             <div className="muted">@{u.username} · {u.email} · applied {ago(u.created_at)}</div>
           </div>
           <div className="inline">
-            <button className="btn btn-primary btn-sm" type="button" disabled={busy === u.id} onClick={() => decide(u.id, true)}>
+            <button className="btn btn-primary btn-sm" type="button" disabled={busy === u.id} onClick={() => confirm({
+              title: `Approve ${u.display_name}?`,
+              body: `${u.display_name} (${u.email}) will be able to sign in to the staff desk.`,
+              confirmLabel: 'Approve',
+              action: () => decide(u.id, true),
+            })}>
               <UserCheck size={15} /> Approve
             </button>
-            <button className="btn btn-remove btn-sm" type="button" disabled={busy === u.id} onClick={() => decide(u.id, false)}>
+            <button className="btn btn-remove btn-sm" type="button" disabled={busy === u.id} onClick={() => confirm({
+              title: `Reject ${u.display_name}?`,
+              body: `${u.display_name} won't be able to use the staff desk.`,
+              confirmLabel: 'Reject',
+              danger: true,
+              action: () => decide(u.id, false),
+            })}>
               <UserX size={15} /> Reject
             </button>
           </div>
@@ -1069,6 +1283,7 @@ export function StaffAdminPage() {
           This can't be undone. They would have to apply again to come back.
         </ConfirmDialog>
       ) : null}
+      {dialog}
     </div>
   )
 }

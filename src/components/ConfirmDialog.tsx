@@ -55,3 +55,38 @@ export function ConfirmDialog({
     </Modal>
   )
 }
+
+type ConfirmRequest = {
+  title: string
+  body: ReactNode
+  confirmLabel: string
+  busyLabel?: string
+  danger?: boolean
+  /** Runs after the user confirms; return an error message to keep the dialog open. */
+  action: () => Promise<string | null | void> | string | null | void
+}
+
+/**
+ * Ask before doing something: `confirm({ title, body, confirmLabel, action })`.
+ * Render `dialog` somewhere in the component.
+ */
+export function useConfirm() {
+  const [req, setReq] = useState<ConfirmRequest | null>(null)
+  const dialog = req ? (
+    <ConfirmDialog
+      title={req.title}
+      confirmLabel={req.confirmLabel}
+      busyLabel={req.busyLabel}
+      danger={req.danger}
+      onClose={() => setReq(null)}
+      onConfirm={async () => {
+        const err = await req.action()
+        if (!err) setReq(null)
+        return err
+      }}
+    >
+      {req.body}
+    </ConfirmDialog>
+  ) : null
+  return { confirm: setReq as (r: ConfirmRequest) => void, dialog }
+}

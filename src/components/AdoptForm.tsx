@@ -43,6 +43,9 @@ export function AdoptForm({ dog, onClose }: { dog: Dog; onClose: () => void }) {
     if (!idFile) return
     setBusy(true)
     setError('')
+    const full = `Sorry, ${dog.name} already has 5 adoption requests being reviewed. Please check back later.`
+    const { data: open } = await supabase.rpc('adoption_open', { p_dog: dog.id })
+    if (open === false) { setBusy(false); setError(full); return }
     const path = `${crypto.randomUUID()}-${idFile.name.replace(/\s+/g, '-')}`
     const { error: upErr } = await supabase.storage.from('id-photos').upload(path, idFile)
     if (upErr) {
@@ -62,7 +65,10 @@ export function AdoptForm({ dog, onClose }: { dog: Dog; onClose: () => void }) {
       id_photo_url: path,
     })
     setBusy(false)
-    if (insErr) { setError(insErr.message); return }
+    if (insErr) {
+      setError(/row-level security|5 adoption requests/i.test(insErr.message) ? full : insErr.message)
+      return
+    }
     setStep('done')
   }
 
@@ -81,7 +87,7 @@ export function AdoptForm({ dog, onClose }: { dog: Dog; onClose: () => void }) {
           <form onSubmit={review}>
             <p className="muted">A telephone number, a photo of a valid ID, and a note naming who wants to adopt {dog.name} are required.</p>
             {error ? <p className="err">{error}</p> : null}
-            <label>Full name of the person who wants to adopt *</label>
+            <label>Full name *</label>
             <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} required />
             <div className="form-grid">
               <div>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { canHavePuppies, daysIn, statusClass } from '../lib/utils'
+import { MAX_ADOPTION_REQUESTS, canHavePuppies, daysIn, statusClass } from '../lib/utils'
 import type { Dog } from '../types'
 import { useAuth } from '../context/AuthContext'
 import { DogPhoto } from './DogCard'
@@ -24,8 +24,15 @@ export function DogPeek({
   const [pups, setPups] = useState<Dog[]>([])
   const [mother, setMother] = useState<Dog | null>(null)
   const [adoptOpen, setAdoptOpen] = useState(false)
+  const [requests, setRequests] = useState(0)
+
+  async function loadRequests(id: string) {
+    const { data } = await supabase.rpc('adoption_request_count', { p_dog: id })
+    setRequests(typeof data === 'number' ? data : 0)
+  }
 
   useEffect(() => {
+    loadRequests(currentId)
     supabase.from('dogs').select('*').eq('id', currentId).maybeSingle().then(({ data }) => {
       const d = data as Dog | null
       setDog(d)
@@ -72,8 +79,8 @@ export function DogPeek({
           <div className="dog-peek-top">
             <DogPhoto dog={dog} className="dog-peek-photo" />
             <div>
-              <p className="kicker">{dog.status}</p>
-              <h2>{dog.name}</h2>
+              <p className="kicker">{dog.status === 'Pending Adoption' ? 'Available · Finalizing' : dog.status}</p>
+              <h2>{dog.name}{dog.status === 'Pending Adoption' ? <span className="finalizing"> (Finalizing)</span> : null}</h2>
               {mother ? (
                 <p className="muted">
                   Puppy of{' '}
@@ -121,17 +128,31 @@ export function DogPeek({
                 <button className="btn btn-coral btn-pill" type="button" onClick={() => navigate(`/ops/dogs/${dog.id}`)}>Edit profile</button>
                 <span className={`status ${statusClass(dog.status)}`}>{dog.status}</span>
               </>
-            ) : dog.status === 'Available' ? (
-              <button className="btn btn-accent btn-pill" type="button" onClick={() => setAdoptOpen(true)}>
-                I want to adopt {dog.name}
-              </button>
+            ) : dog.status === 'Available' || dog.status === 'Pending Adoption' ? (
+              <div className="adopt-cta">
+                <button
+                  className="btn btn-accent"
+                  type="button"
+                  disabled={requests >= MAX_ADOPTION_REQUESTS}
+                  onClick={() => setAdoptOpen(true)}
+                >
+                  {requests >= MAX_ADOPTION_REQUESTS ? 'Adoption requests are full' : `I want to adopt ${dog.name}`}
+                </button>
+                {requests > 0 ? (
+                  <p className="muted">
+                    {requests >= MAX_ADOPTION_REQUESTS
+                      ? `${dog.name} already has ${MAX_ADOPTION_REQUESTS} adoption requests being reviewed. Please check back later.`
+                      : `${dog.name}'s adoption is being finalized · ${requests} of ${MAX_ADOPTION_REQUESTS} requests received. You can still apply.`}
+                  </p>
+                ) : null}
+              </div>
             ) : (
               <p className="muted">This dog is not listed for adoption right now.</p>
             )}
           </div>
         </div>
       </Modal>
-      {adoptOpen ? <AdoptForm dog={dog} onClose={() => setAdoptOpen(false)} /> : null}
+      {adoptOpen ? <AdoptForm dog={dog} onClose={() => { setAdoptOpen(false); loadRequests(dog.id) }} /> : null}
     </>
   )
 }

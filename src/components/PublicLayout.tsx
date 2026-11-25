@@ -1,8 +1,9 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { Clock, Download, HandHeart, Home, Info, LayoutDashboard, LogIn, LogOut, Mail, MapPin, Menu, PawPrint, Phone, X } from 'lucide-react'
-import { APK_URL, isNativeApp } from '../lib/app'
+import { Clock, HandHeart, Home, Info, LayoutDashboard, LogIn, LogOut, Mail, MapPin, Menu, PawPrint, Phone, X } from 'lucide-react'
+import { showAppLinks } from '../lib/app'
+import { GetAppButtons } from './IosInstall'
 
 export function PublicLayout({ children }: { children: ReactNode }) {
   const { profile, isStaff, signOut } = useAuth()
@@ -91,7 +92,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
         </nav>
         <div className="drawer-foot">
           {account}
-          {!isNativeApp ? <a className="btn btn-light btn-sm" href={APK_URL} download><Download size={16} /> Get the Android app</a> : null}
+          {showAppLinks ? <GetAppButtons className="btn btn-light btn-sm" both /> : null}
         </div>
       </aside>
       {children}
@@ -105,7 +106,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
             <h4>Quick Links</h4>
             <p><button type="button" onClick={() => navigate('/adopt')}>Adopt a dog</button></p>
             <p><button type="button" onClick={() => navigate('/donate')}>Donate</button></p>
-            {!isNativeApp ? <p><a href={APK_URL} download><Download size={14} /> Get the Android app</a></p> : null}
+            {showAppLinks ? <div className="foot-app"><GetAppButtons className="" size={14} both /></div> : null}
           </div>
           <div>
             <h4>Contact</h4>

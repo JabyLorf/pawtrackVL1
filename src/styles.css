@@ -153,6 +153,9 @@ section.block.alt { background: var(--surface); border-block: 1px solid var(--li
 .dog-photo img, .dog-peek-photo img, .puppy-photo img { width: 100%; height: 100%; object-fit: cover; }
 .dog-body { padding: .9rem 1rem 1.1rem; }
 .dog-meta { font-size: .85rem; color: var(--muted); }
+.finalizing { font-size: .8em; font-weight: 600; color: var(--accent-dark); }
+.adopt-cta { display: grid; gap: 8px; }
+.adopt-cta .muted { font-size: .88rem; }
 .filters { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center; }
 .filter {
   border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft);
@@ -462,6 +465,10 @@ fieldset.plain:disabled { opacity: .65; }
 .qr-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; font-size: .85rem; }
 .qr-actions .muted { flex: 1; min-width: 180px; }
 .center-link { display: block; margin: 14px auto 0; }
+.peso-input { position: relative; display: flex; align-items: center; }
+.peso-input span { position: absolute; left: 14px; font-weight: 700; color: var(--muted); font-size: 1.1rem; }
+.peso-input + .hint { margin: 6px 0 0; }
+.peso-input input { padding-left: 34px; height: 50px; font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .ready { display: flex; align-items: center; gap: 8px; margin: 18px 0 4px; padding: 10px 12px; border-radius: 10px; background: #f3f5f4; color: var(--muted); font-weight: 600; font-size: .92rem; transition: background .2s, color .2s; }
 .ready.on { background: var(--brand-light); color: var(--brand-dark); }
 .donate-done { text-align: center; padding: 8px 0; }
@@ -493,12 +500,20 @@ fieldset.plain:disabled { opacity: .65; }
   .amount-grid, .kpi-grid { grid-template-columns: 1fr 1fr; }
 }
 
-@media (max-width: 959px) {
+/* Public site: menu bar on tablets and laptops, side drawer on phones only */
+@media (max-width: 767px) {
   .nav-toggle { display: grid; }
   .site-links { display: none; }
 }
-@media (min-width: 960px) {
+@media (min-width: 768px) {
   .site-drawer, .drawer-backdrop { display: none; }
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  .site-nav .container { gap: 10px; }
+  .site-links { gap: 0; flex-wrap: nowrap; }
+  .linkish { padding: 8px 9px; font-size: .9rem; }
+  .site-links .btn { margin-left: 4px; padding: 7px 10px; }
+  .oso-brand small { display: none; }
 }
 
 @media (max-width: 899px) {
@@ -537,3 +552,13 @@ fieldset.plain:disabled { opacity: .65; }
   .dog-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .compact-adopt .dog-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 }
+
+/* iPhone "Add to Home Screen" steps */
+.ios-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.ios-steps li { display: flex; gap: 12px; align-items: flex-start; font-size: .95rem; color: var(--ink-soft); }
+.ios-steps li > span { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--brand-light); color: var(--brand-dark); font-weight: 700; font-size: .82rem; flex-shrink: 0; }
+.ios-steps li > div { padding-top: 3px; }
+.inline-ic { vertical-align: -3px; color: var(--brand); }
+.app-cta .btn-ghost-light { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.45); }
+.app-cta .btn-ghost-light:hover { background: rgba(255,255,255,.1); }
+.foot-app { display: grid; gap: .45rem; justify-items: start; }

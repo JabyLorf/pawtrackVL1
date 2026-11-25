@@ -38,12 +38,21 @@ export function DonatePage() {
   const sending = useRef(false)
 
   const needsRef = method === 'GCash' || method === 'GoTyme' || method === 'Bank Transfer'
-  const amountOk = Number(amount) >= 1
+  const amountOk = /^[1-9]\d{0,5}$/.test(amount)
   const refOk = !needsRef || reference.replace(/\s/g, '').length >= 6
   const ready = amountOk && refOk
 
-  async function submit(e: FormEvent) {
+  const [confirming, setConfirming] = useState(false)
+
+  function review(e: FormEvent) {
     e.preventDefault()
+    if (!amountOk) { setError('Enter the amount you sent.'); return }
+    if (!refOk) { setError('Enter the reference number from your GCash or bank receipt.'); return }
+    setError('')
+    setConfirming(true)
+  }
+
+  async function submit() {
     if (sending.current) return
     if (!amountOk) { setError('Enter the amount you sent.'); return }
     if (!refOk) { setError('Enter the reference number from your GCash or bank receipt.'); return }
@@ -70,6 +79,7 @@ export function DonatePage() {
     })
     setBusy(false)
     sending.current = false
+    setConfirming(false)
     if (err) { setError(err.message); return }
     setStep('done')
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -158,7 +168,7 @@ export function DonatePage() {
                   </button>
                 </div>
               ) : step === 'details' ? (
-                <form onSubmit={submit}>
+                <form onSubmit={review}>
                   <h3>Tell us about your donation</h3>
                   <p className="muted">So our staff can match it with the payment.</p>
 
@@ -167,13 +177,20 @@ export function DonatePage() {
                     {METHODS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
 
-                  <label htmlFor="d-amount">Amount you {method === 'In-kind Donation' ? 'estimate (PHP)' : 'sent (PHP)'} *</label>
-                  <div className="amount-grid">
-                    {['100', '250', '500', '1000'].map((n) => (
-                      <button type="button" key={n} className={amount === n ? 'on' : ''} onClick={() => setAmount(n)}>₱{Number(n).toLocaleString()}</button>
-                    ))}
+                  <label htmlFor="d-amount">Amount you {method === 'In-kind Donation' ? 'estimate' : 'sent'} *</label>
+                  <div className="peso-input">
+                    <span aria-hidden="true">₱</span>
+                    <input
+                      id="d-amount"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      placeholder="0"
+                     
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 6))}
+                    />
                   </div>
-                  <input id="d-amount" type="number" inputMode="decimal" min={1} step="0.01" placeholder="Other amount" value={amount} onChange={(e) => setAmount(e.target.value)} />
+                  <p className="hint">Type the exact amount in pesos, up to ₱999,999.</p>
 
                   {needsRef ? (
                     <>
@@ -238,6 +255,30 @@ export function DonatePage() {
           </div>
         </div>
       </section>
+      {confirming ? (
+        <Modal onClose={() => { if (!busy) setConfirming(false) }}>
+          <div className="dialog">
+            <div className="auth-icon"><HeartHandshake size={22} /></div>
+            <h2>Submit this donation?</h2>
+            <p className="auth-sub">Please check the details. Our staff will match them with the payment.</p>
+            <div className="adopt-review">
+              <div><span>Amount</span><b>₱{Number(amount).toLocaleString('en-PH')}</b></div>
+              <div><span>Paid with</span><b>{METHODS.find(([v]) => v === method)?.[1] || method}</b></div>
+              {needsRef ? <div><span>Reference no.</span><b>{reference.trim()}</b></div> : null}
+              <div><span>Name</span><b>{anonymous || !name.trim() ? 'Anonymous' : name.trim()}</b></div>
+              {email.trim() ? <div><span>Email</span><b>{email.trim()}</b></div> : null}
+              <div><span>For</span><b>{purpose}</b></div>
+            </div>
+            {error ? <p className="err">{error}</p> : null}
+            <div className="dialog-actions">
+              <button className="btn btn-light" type="button" disabled={busy} onClick={() => setConfirming(false)}>Edit</button>
+              <button className="btn btn-primary" type="button" disabled={busy} onClick={submit}>
+                {busy ? <><Loader2 size={16} className="spin" /> Submitting…</> : 'Yes, submit'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
     </PublicLayout>
   )
 }

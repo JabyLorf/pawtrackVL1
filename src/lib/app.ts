@@ -9,3 +9,18 @@ export const APK_URL =
 
 // True inside the installed Android app, where the download button is pointless.
 export const isNativeApp = Capacitor.isNativePlatform()
+
+// iPhone/iPad (iPadOS reports itself as a Mac, so check for touch too).
+export const isIOS =
+  typeof navigator !== 'undefined' &&
+  (/iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
+
+// True when opened from the home-screen icon instead of the browser.
+export const isHomeScreenApp =
+  typeof window !== 'undefined' &&
+  (window.matchMedia?.('(display-mode: standalone)').matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true)
+
+// Whether to show "get the app" links at all.
+export const showAppLinks = !isNativeApp && !isHomeScreenApp

@@ -14,7 +14,7 @@ export function DogCard({ dog, onOpen }: { dog: Dog; onOpen: (id: string) => voi
     <button type="button" className="dog-card" onClick={() => onOpen(dog.id)}>
       <DogPhoto dog={dog} className="dog-photo" />
       <div className="dog-body">
-        <h3>{dog.name}</h3>
+        <h3>{dog.name}{dog.status === 'Pending Adoption' ? <span className="finalizing"> (Finalizing)</span> : null}</h3>
         <div className="dog-meta">
           <div><b>Sex:</b> {dog.sex}</div>
           <div><b>Age:</b> {dog.age}</div>

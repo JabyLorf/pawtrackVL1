@@ -45,12 +45,14 @@ export function isListed(d: Dog) {
   return (
     d.visible &&
     d.status !== 'Adopted' &&
-    d.status !== 'Pending Adoption' &&
     d.status !== 'Under Treatment' &&
     d.status !== 'Fostered' &&
     d.status !== 'Deceased'
   )
 }
+
+/** Most pending adoption requests a dog can have at once (also enforced in the database). */
+export const MAX_ADOPTION_REQUESTS = 5
 
 export function inCare(d: Dog) {
   return d.status !== 'Adopted' && d.status !== 'Deceased'
