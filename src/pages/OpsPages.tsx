@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { ago, dogMatches, inCare, peso, statusClass } from '../lib/utils'
+import { ago, calendarDaysSince, dogMatches, localDate, inCare, isListed, peso, statusClass } from '../lib/utils'
 import type { Activity, Adoption, Dog, DogStatus, Donation, InboxMessage, Profile } from '../types'
-import { ADD_STATUSES, AGES, SEXES, SIZES } from '../types'
+import { ADD_STATUSES, AGES, INTAKE_REASONS, SEXES, SIZES, type Intake, type IntakeReason } from '../types'
 import { DogPeek } from '../components/DogPeek'
 import { DogPhoto } from '../components/DogCard'
 import { useDevice } from '../context/DeviceContext'
@@ -242,11 +242,12 @@ export function DogsPage() {
     load()
   }
 
-  const rows = dogs.filter(inCare).filter((d) => dogMatches(d, q))
+  // Only dogs up for adoption; dogs that can't be adopted yet are on the Intake page.
+  const rows = dogs.filter((d) => inCare(d) && isListed(d)).filter((d) => dogMatches(d, q))
   return (
     <div>
       <h1 className="page-h1">Pet Register</h1>
-      <p className="page-sub">Dogs in care. Adopted and mortality records live in their own tables.</p>
+      <p className="page-sub">Dogs in care that are up for adoption. Dogs under treatment, fostered, or hidden are on the Intake page; adopted and mortality records have their own pages.</p>
       {flash ? <Flash text={flash} onClose={() => setFlash('')} /> : null}
       <div className="staff-toolbar">
         <input className="staff-search" placeholder="Search by name, age, color, or sex" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -274,6 +275,146 @@ export function DogsPage() {
           </>
         )}
       />
+      {dialog}
+    </div>
+  )
+}
+
+export function IntakePage() {
+  const { confirm, dialog } = useConfirm()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { kind } = useDevice()
+  const [rows, setRows] = useState<Intake[]>([])
+  const [loaded, setLoaded] = useState(false)
+  // Registered dogs that also can't be adopted right now (e.g. fell sick later).
+  const [other, setOther] = useState<Dog[]>([])
+  const [q, setQ] = useState('')
+  const [flash, setFlash] = useState<string>((location.state as { flash?: string } | null)?.flash || '')
+
+  async function load() {
+    const [{ data }, { data: dogs }] = await Promise.all([
+      supabase.from('intakes').select('*').is('moved_at', null).order('intake_at', { ascending: false }),
+      supabase.from('dogs').select('*').order('name'),
+    ])
+    setRows((data as Intake[]) || [])
+    setOther(((dogs as Dog[]) || []).filter((d) => inCare(d) && !isListed(d)))
+    setLoaded(true)
+  }
+  useEffect(() => { load() }, [])
+
+  async function finish(r: Intake, outcome: 'Available' | 'Deceased') {
+    const { data, error } = await supabase.rpc('finish_intake', { p_id: r.id, p_outcome: outcome })
+    if (error) return error.message
+    if (outcome === 'Available') {
+      navigate(`/ops/dogs?open=${data}`, {
+        state: { flash: `${r.name} is now up for adoption. Edit the profile to add a story for adopters.` },
+      })
+    } else {
+      setFlash(`${r.name} was moved to Mortality records.`)
+      load()
+    }
+    return null
+  }
+
+  const since = (r: Intake) => {
+    const n = calendarDaysSince(r.intake_at)
+    return n === 0 ? 'Arrived today' : `${n} day${n === 1 ? '' : 's'}`
+  }
+  const n = q.trim().toLowerCase()
+  const list = rows.filter((r) => !n || [r.name, r.reason, r.found_at, r.sex, r.age, r.color, r.breed].join(' ').toLowerCase().includes(n))
+
+  const actions = (r: Intake) => (
+    <>
+      <Link className="btn btn-ghost" to={`/ops/intake/${r.id}`}>Edit</Link>
+      <button className="btn btn-ghost" type="button" onClick={() => confirm({
+        title: `Put ${r.name} up for adoption?`,
+        body: `${r.name} moves from Intake to the Pet Register and appears on the public Adopt page.`,
+        confirmLabel: 'Yes, ready for adoption',
+        busyLabel: 'Moving…',
+        action: () => finish(r, 'Available'),
+      })}>Ready for adoption</button>
+      <button className="btn btn-ghost" type="button" onClick={() => confirm({
+        title: `Mark ${r.name} as deceased?`,
+        body: `${r.name} moves from Intake to Mortality records.`,
+        confirmLabel: 'Mark deceased',
+        busyLabel: 'Moving…',
+        danger: true,
+        action: () => finish(r, 'Deceased'),
+      })}>Mark deceased</button>
+    </>
+  )
+
+  return (
+    <div>
+      <h1 className="page-h1">Intake</h1>
+      <p className="page-sub">
+        Dogs that just arrived and can't be adopted yet. Staff only: they are not on the website until they're marked ready for adoption.
+      </p>
+      {flash ? <Flash text={flash} onClose={() => setFlash('')} /> : null}
+      <div className="staff-toolbar">
+        <input className="staff-search" placeholder="Search by name, reason, or where found" value={q} onChange={(e) => setQ(e.target.value)} />
+        <button className="btn btn-primary" type="button" onClick={() => navigate('/ops/dogs/new?kind=intake')}><Plus size={16} /> Add to Intake</button>
+      </div>
+      {!loaded ? <p className="empty">Loading…</p> : kind === 'phone' ? (
+        <div className="dog-list">
+          {list.length ? list.map((r) => (
+            <div className="dog-row" key={r.id}>
+              <Link className="dog-row-main" to={`/ops/intake/${r.id}`} aria-label={`Edit ${r.name}`}>
+                <DogPhoto dog={r} className="dog-row-photo" />
+                <div className="dog-row-info">
+                  <div className="dog-row-top">
+                    <b>{r.name}</b>
+                    <span className="status pending">{r.reason}</span>
+                  </div>
+                  <div className="dog-row-meta">{r.sex} · {r.age} · {since(r)}</div>
+                  {r.found_at ? <div className="dog-row-meta">Found: {r.found_at}</div> : null}
+                </div>
+              </Link>
+              <div className="dog-row-actions">{actions(r)}</div>
+            </div>
+          )) : <p className="empty panel">{q ? 'No intake records match your search.' : 'No dogs in intake right now.'}</p>}
+        </div>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Sex / Age</th><th>Reason</th><th>Found</th><th>In intake</th><th>Action</th></tr>
+            </thead>
+            <tbody>
+              {list.length ? list.map((r) => (
+                <tr key={r.id}>
+                  <td><b>{r.name}</b>{r.notes ? <div className="muted intake-note">{r.notes.length > 60 ? r.notes.slice(0, 60) + '…' : r.notes}</div> : null}</td>
+                  <td>{r.sex} · {r.age}</td>
+                  <td><span className="status pending">{r.reason}</span></td>
+                  <td>{r.found_at || '—'}</td>
+                  <td>{since(r)}</td>
+                  <td><div className="inline">{actions(r)}</div></td>
+                </tr>
+              )) : <tr><td colSpan={6} className="empty">{q ? 'No intake records match your search.' : 'No dogs in intake right now.'}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {other.length ? (
+        <>
+          <h2 className="section-h2">Registered dogs not up for adoption</h2>
+          <p className="page-sub">Dogs from the Pet Register that are under treatment, fostered, or hidden. Set them back to Available when they're ready.</p>
+          <DogTable list={other} onChanged={load} extra={(d) => (
+            <button className="btn btn-ghost" type="button" onClick={() => confirm({
+              title: `Put ${d.name} up for adoption?`,
+              body: `${d.name} becomes Available and appears on the public Adopt page.`,
+              confirmLabel: 'Yes, ready for adoption',
+              action: async () => {
+                const { error } = await supabase.from('dogs').update({ status: 'Available', visible: true }).eq('id', d.id)
+                if (error) return error.message
+                load()
+                return null
+              },
+            })}>Ready for adoption</button>
+          )} />
+        </>
+      ) : null}
       {dialog}
     </div>
   )
@@ -435,9 +576,20 @@ export function DeletedDogsPage() {
 
 export function DogEditPage() {
   const { confirm, dialog } = useConfirm()
-  const { id } = useParams()
+  const { id, intakeId } = useParams()
   const navigate = useNavigate()
-  const isNew = !id || id === 'new'
+  const [search] = useSearchParams()
+  const isNew = !intakeId && (!id || id === 'new')
+  // New dogs go either up for adoption (dogs table) or into intake (intakes table).
+  const [kind, setKind] = useState<'adoption' | 'intake'>(intakeId || search.get('kind') === 'intake' ? 'intake' : 'adoption')
+  const isIntake = kind === 'intake'
+  const [intake, setIntake] = useState({
+    reason: 'Under treatment' as IntakeReason,
+    found_at: '',
+    rescued_by: '',
+    notes: '',
+    intake_at: localDate(),
+  })
   const [dog, setDog] = useState<Partial<Dog>>({
     name: '', sex: 'Female', age: 'Young Adult', breed: 'Aspin', color: '', size: 'Medium',
     status: 'Available', vax_5in1: true, anti_rabies: true, dewormed: true, spayed: false,
@@ -455,11 +607,29 @@ export function DogEditPage() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   // What the form looked like when it opened, to tell if anything was typed.
   const [original, setOriginal] = useState(() => JSON.stringify(dog))
-  const dirty = JSON.stringify(dog) !== original || !!file || !!pupName.trim()
-  const { leaveDialog, allowLeave } = useLeaveGuard(dirty, { what: isNew ? 'adding this dog' : 'editing this dog' })
+  const [originalIntake, setOriginalIntake] = useState(() => JSON.stringify(intake))
+  const dirty = JSON.stringify(dog) !== original || JSON.stringify(intake) !== originalIntake || !!file || !!pupName.trim()
+  const { leaveDialog, allowLeave } = useLeaveGuard(dirty, {
+    what: isNew ? (isIntake ? 'this intake' : 'adding this dog') : isIntake ? 'editing this intake' : 'editing this dog',
+  })
 
   useEffect(() => {
-    if (isNew) return
+    if (!intakeId) return
+    supabase.from('intakes').select('*').eq('id', intakeId).maybeSingle().then(({ data }) => {
+      if (!data) return
+      const r = data as Intake
+      const d: Partial<Dog> = {
+        name: r.name, sex: r.sex, age: r.age, breed: r.breed, color: r.color, size: r.size, photo_url: r.photo_url,
+        vax_5in1: r.vax_5in1, anti_rabies: r.anti_rabies, dewormed: r.dewormed, spayed: r.spayed, temperament: r.temperament,
+      }
+      const i = { reason: r.reason, found_at: r.found_at, rescued_by: r.rescued_by, notes: r.notes, intake_at: localDate(new Date(r.intake_at)) }
+      setDog(d); setOriginal(JSON.stringify(d))
+      setIntake(i); setOriginalIntake(JSON.stringify(i))
+    })
+  }, [intakeId])
+
+  useEffect(() => {
+    if (isNew || intakeId) return
     supabase.from('dogs').select('*').eq('id', id).maybeSingle().then(({ data }) => {
       if (data) { setDog(data as Dog); setOriginal(JSON.stringify(data)) }
     })
@@ -488,6 +658,35 @@ export function DogEditPage() {
       if (upErr) { setError(upErr.message); return }
       photo_url = supabase.storage.from('dog-photos').getPublicUrl(path).data.publicUrl
     }
+    if (isIntake) {
+      const record = {
+        name: dog.name!.trim(),
+        sex: dog.sex,
+        age: dog.age,
+        breed: dog.breed || 'Aspin',
+        color: dog.color || '',
+        size: dog.size || 'Medium',
+        vax_5in1: !!dog.vax_5in1,
+        anti_rabies: !!dog.anti_rabies,
+        dewormed: !!dog.dewormed,
+        spayed: !!dog.spayed,
+        temperament: dog.temperament || '',
+        photo_url,
+        reason: intake.reason,
+        found_at: intake.found_at.trim(),
+        rescued_by: intake.rescued_by.trim(),
+        notes: intake.notes.trim(),
+        // Noon local time, so the date doesn't shift a day in other time zones.
+        intake_at: new Date(`${intake.intake_at}T12:00:00`).toISOString(),
+      }
+      const { error: err } = intakeId
+        ? await supabase.from('intakes').update(record).eq('id', intakeId)
+        : await supabase.from('intakes').insert(record)
+      if (err) { setError(err.message); return }
+      allowLeave()
+      navigate('/ops/intake', { state: { flash: intakeId ? `Changes to ${record.name} were saved.` : `${record.name} was added to Intake.` } })
+      return
+    }
     const payload = {
       name: dog.name!.trim(),
       sex: dog.sex,
@@ -504,16 +703,19 @@ export function DogEditPage() {
       story: dog.story || '',
       photo_url,
     }
+    // Dogs that can't be adopted yet live on the Intake page.
+    const saved = { visible: true, ...dog, ...payload } as Dog
+    const listPage = inCare(saved) && !isListed(saved) ? '/ops/intake' : '/ops/dogs'
     if (isNew) {
       const { data, error: err } = await supabase.from('dogs').insert(payload).select('id').single()
       if (err) { setError(err.message); return }
       allowLeave()
-      navigate(`/ops/dogs?open=${data.id}`, { state: { flash: `${payload.name} was added to the Pet Register.` } })
+      navigate(`${listPage}?open=${data.id}`, { state: { flash: `${payload.name} was added to the ${listPage === '/ops/dogs' ? 'Pet Register' : 'Intake list'}.` } })
     } else {
       const { error: err } = await supabase.from('dogs').update(payload).eq('id', id)
       if (err) { setError(err.message); return }
       allowLeave()
-      navigate(`/ops/dogs?open=${id}`, { state: { flash: `Changes to ${payload.name} were saved.` } })
+      navigate(`${listPage}?open=${id}`, { state: { flash: `Changes to ${payload.name} were saved.` } })
     }
   }
 
@@ -538,28 +740,51 @@ export function DogEditPage() {
   return (
     <div>
       <button className="link" type="button" onClick={() => navigate(-1)}>← Back</button>
-      <h1 className="page-h1">{isNew ? 'Add a dog' : `Edit ${dog.name || 'dog'}`}</h1>
+      <h1 className="page-h1">{isNew ? 'Add a dog' : intakeId ? `Edit intake: ${dog.name || 'dog'}` : `Edit ${dog.name || 'dog'}`}</h1>
       <form
         className="admin-form"
         aria-busy={saving}
         onSubmit={(e) => {
           e.preventDefault()
           if (!dog.name?.trim()) { setError('Name is required.'); return }
+          const adding = isNew
           confirm({
-            title: isNew ? `Add ${dog.name.trim()}?` : `Save changes to ${dog.name.trim()}?`,
-            body: isNew ? 'The dog will be added to the Pet Register.' : 'The profile will be updated on the staff desk and the website.',
-            confirmLabel: isNew ? 'Add dog' : 'Save changes',
+            title: adding ? `Add ${dog.name.trim()} to ${isIntake ? 'Intake' : 'adoption'}?` : `Save changes to ${dog.name.trim()}?`,
+            body: isIntake
+              ? `${adding ? 'The dog will be added to the Intake list' : 'The intake record will be updated'}. It stays off the website until it's marked ready for adoption.`
+              : adding ? 'The dog will be added to the Pet Register and shown on the Adopt page.' : 'The profile will be updated on the staff desk and the website.',
+            confirmLabel: adding ? (isIntake ? 'Add to Intake' : 'Add dog') : 'Save changes',
             busyLabel: 'Saving…',
             action: save,
           })
         }}
       >
         <fieldset className="plain" disabled={saving}>
+        {isNew ? (
+          <div className="kind-choice" role="radiogroup" aria-label="Where does this dog go?">
+            <label className={'kind-opt' + (!isIntake ? ' on' : '')}>
+              <input type="radio" name="kind" checked={!isIntake} onChange={() => setKind('adoption')} />
+              <span><b>For adoption</b><small>Healthy and ready. Shown on the public Adopt page.</small></span>
+            </label>
+            <label className={'kind-opt' + (isIntake ? ' on' : '')}>
+              <input type="radio" name="kind" checked={isIntake} onChange={() => setKind('intake')} />
+              <span><b>Intake</b><small>Just arrived, injured, sick or in quarantine. Staff only, not for adoption yet.</small></span>
+            </label>
+          </div>
+        ) : null}
         {dog.photo_url ? <img src={dog.photo_url} alt="" style={{ width: 160, aspectRatio: '1', objectFit: 'cover', borderRadius: 12 }} /> : null}
         <label>Photo</label>
         <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
         <div className="form-grid">
           <div><label>Name *</label><input value={dog.name || ''} onChange={(e) => setDog({ ...dog, name: e.target.value })} /></div>
+          {isIntake ? (
+            <div>
+              <label>Reason for intake</label>
+              <select value={intake.reason} onChange={(e) => setIntake({ ...intake, reason: e.target.value as IntakeReason })}>
+                {INTAKE_REASONS.map((r) => <option key={r}>{r}</option>)}
+              </select>
+            </div>
+          ) : isNew ? null : (
           <div>
             <label>Status</label>
             {locked ? <p className="muted">{dog.status}</p> : (
@@ -568,13 +793,23 @@ export function DogEditPage() {
               </select>
             )}
           </div>
+          )}
           <div><label>Sex</label><select value={dog.sex} onChange={(e) => setDog({ ...dog, sex: e.target.value as Dog['sex'] })}>{SEXES.map((s) => <option key={s}>{s}</option>)}</select></div>
           <div><label>Age</label><select value={dog.age} onChange={(e) => setDog({ ...dog, age: e.target.value as Dog['age'] })}>{AGES.map((s) => <option key={s}>{s}</option>)}</select></div>
           <div><label>Breed</label><input value={dog.breed || ''} onChange={(e) => setDog({ ...dog, breed: e.target.value })} /></div>
           <div><label>Color</label><input value={dog.color || ''} onChange={(e) => setDog({ ...dog, color: e.target.value })} /></div>
           <div><label>Size</label><select value={dog.size} onChange={(e) => setDog({ ...dog, size: e.target.value as Dog['size'] })}>{SIZES.map((s) => <option key={s}>{s}</option>)}</select></div>
           <div><label>Temperament</label><input value={dog.temperament || ''} onChange={(e) => setDog({ ...dog, temperament: e.target.value })} /></div>
-          <div className="full"><label>Story</label><textarea rows={4} value={dog.story || ''} onChange={(e) => setDog({ ...dog, story: e.target.value })} /></div>
+          {isIntake ? (
+            <>
+              <div><label>Date of intake</label><input type="date" value={intake.intake_at} max={localDate()} onChange={(e) => setIntake({ ...intake, intake_at: e.target.value })} /></div>
+              <div><label>Where it was found</label><input placeholder="e.g. Brgy. Cogon market" value={intake.found_at} onChange={(e) => setIntake({ ...intake, found_at: e.target.value })} /></div>
+              <div><label>Rescued / brought in by</label><input value={intake.rescued_by} onChange={(e) => setIntake({ ...intake, rescued_by: e.target.value })} /></div>
+              <div className="full"><label>Condition and treatment notes (staff only)</label><textarea rows={4} value={intake.notes} onChange={(e) => setIntake({ ...intake, notes: e.target.value })} /></div>
+            </>
+          ) : (
+            <div className="full"><label>Story</label><textarea rows={4} value={dog.story || ''} onChange={(e) => setDog({ ...dog, story: e.target.value })} /></div>
+          )}
         </div>
         <fieldset className="check-group">
           <legend>Health</legend>
@@ -586,10 +821,32 @@ export function DogEditPage() {
         </fieldset>
         {error ? <p className="err">{error}</p> : null}
         <button className="btn btn-primary btn-block" type="submit" disabled={saving}>
-          {saving ? <><Loader2 size={17} className="spin" /> {file ? 'Uploading photo and saving…' : 'Saving…'}</> : isNew ? 'Add dog' : 'Save changes'}
+          {saving ? <><Loader2 size={17} className="spin" /> {file ? 'Uploading photo and saving…' : 'Saving…'}</> : isNew ? (isIntake ? 'Add to Intake' : 'Add dog') : 'Save changes'}
         </button>
       </form>
-      {!isNew && isAdmin ? (
+      {intakeId && isAdmin ? (
+        <div className="danger-zone">
+          <div>
+            <b>Delete this intake record</b>
+            <p className="muted">Use this only for a record added by mistake. It is deleted for good.</p>
+          </div>
+          <button className="btn btn-remove" type="button" disabled={saving} onClick={() => confirm({
+            title: `Delete ${dog.name || 'this intake record'}?`,
+            body: `${dog.name}'s intake record will be permanently deleted. This can't be undone.`,
+            confirmLabel: 'Delete for good',
+            busyLabel: 'Deleting…',
+            danger: true,
+            action: async () => {
+              const { error: err } = await supabase.from('intakes').delete().eq('id', intakeId)
+              if (err) return err.message
+              allowLeave()
+              navigate('/ops/intake', { state: { flash: `${dog.name}'s intake record was deleted.` } })
+              return null
+            },
+          })}><Trash2 size={15} /> Delete record</button>
+        </div>
+      ) : null}
+      {!isNew && !intakeId && isAdmin ? (
         <div className="danger-zone">
           <div>
             <b>Delete this dog</b>
@@ -617,7 +874,7 @@ export function DogEditPage() {
           You can restore it there for 7 days, then it is deleted for good.
         </ConfirmDialog>
       ) : null}
-      {!isNew && femaleAdult ? (
+      {!isNew && !intakeId && femaleAdult ? (
         <div className="panel" style={{ marginTop: 16, maxWidth: 720 }}>
           <h3>Her puppies</h3>
           {pups.map((p) => <p key={p.id}><Link to={`/ops/dogs/${p.id}`}>{p.name}</Link> · {p.status}</p>)}

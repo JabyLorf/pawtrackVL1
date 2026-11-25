@@ -48,6 +48,34 @@ export type Dog = {
   died_at: string | null
 }
 
+export const INTAKE_REASONS = ['Under treatment', 'Injured', 'Sick', 'Quarantine', 'Too young', 'Behavior assessment', 'Other'] as const
+export type IntakeReason = (typeof INTAKE_REASONS)[number]
+
+/** A dog that just arrived and can't be adopted yet (staff only). */
+export type Intake = {
+  id: string
+  name: string
+  sex: DogSex
+  age: DogAge
+  breed: string
+  color: string
+  size: DogSize
+  photo_url: string
+  reason: IntakeReason
+  found_at: string
+  rescued_by: string
+  notes: string
+  temperament: string
+  vax_5in1: boolean
+  anti_rabies: boolean
+  dewormed: boolean
+  spayed: boolean
+  intake_at: string
+  moved_at: string | null
+  moved_to: 'Available' | 'Deceased' | null
+  moved_dog_id: string | null
+}
+
 export type Adoption = {
   id: string
   dog_id: string

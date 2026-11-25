@@ -566,3 +566,18 @@ fieldset.plain:disabled { opacity: .65; }
 /* Keep the footer at the bottom of the screen on short pages */
 .site-shell { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
 .site-shell > .site-footer { margin-top: auto; }
+.intake-note { font-size: .82rem; margin-right: 4px; }
+
+/* Add dog: For adoption / Intake choice */
+.kind-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+.kind-opt { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 12px; cursor: pointer; background: #fff; }
+.kind-opt input { margin-top: 3px; accent-color: var(--brand); width: auto; }
+.kind-opt b { display: block; font-size: .95rem; }
+.kind-opt small { display: block; color: var(--muted); font-size: .8rem; line-height: 1.35; margin-top: 2px; }
+.kind-opt.on { border-color: var(--brand); background: var(--brand-light); }
+.section-h2 { font-size: 1.1rem; margin: 28px 0 4px; }
+@media (max-width: 560px) { .kind-choice { grid-template-columns: 1fr; } }
+
+/* Staff sign in: forgot password */
+.forgot-row { display: flex; justify-content: flex-end; margin: -6px 0 12px; font-size: .88rem; }
+.auth-notice { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }

@@ -14,6 +14,7 @@ import {
   DogEditPage,
   DogsPage,
   DonationsPage,
+  IntakePage,
   InboxPage,
   MortalityPage,
   StaffAdminPage,
@@ -46,6 +47,8 @@ const router = createBrowserRouter(
         <Route path="dogs" element={<DogsPage />} />
         <Route path="dogs/new" element={<DogEditPage />} />
         <Route path="dogs/:id" element={<DogEditPage />} />
+        <Route path="intake" element={<IntakePage />} />
+        <Route path="intake/:intakeId" element={<DogEditPage />} />
         <Route path="adopted" element={<AdoptedPage />} />
         <Route path="mortality" element={<MortalityPage />} />
         <Route path="adoptions" element={<AdoptionsPage />} />

@@ -13,6 +13,7 @@ import {
   Plus,
   ShieldCheck,
   Stethoscope,
+  Syringe,
   Trash2,
   Users,
   X,
@@ -120,6 +121,7 @@ export function OpsLayout() {
         <div className="ops-group">Shelter operations</div>
         <Item to="/ops" label="Dashboard" icon={<LayoutDashboard size={18} />} />
         <Item to="/ops/dogs" label="Pet Register" icon={<PawPrint size={18} />} />
+        <Item to="/ops/intake" label="Intake" icon={<Syringe size={18} />} />
         <Item to="/ops/adopted" label="Adopted" icon={<HeartHandshake size={18} />} />
         <Item to="/ops/mortality" label="Mortality" icon={<Stethoscope size={18} />} />
         <Item to="/ops/adoptions" label="Adoptions" icon={<ClipboardList size={18} />} badge={pending} />

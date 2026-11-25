@@ -8,6 +8,7 @@ import {
   Clock,
   Eye,
   EyeOff,
+  KeyRound,
   Lock,
   Mail,
   MailCheck,
@@ -20,6 +21,7 @@ import {
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import { PASSWORD_RULES, passwordOk } from '../lib/utils'
+import { useConfirm } from '../components/ConfirmDialog'
 
 function AuthShell({ children }: { children: ReactNode }) {
   return (
@@ -167,6 +169,131 @@ function PendingNotice({ title, body }: { title: string; body: string }) {
   )
 }
 
+/** Forgot password: email → code + new password → back to sign in. */
+function ForgotPassword({ initialEmail, onDone, onBack }: {
+  initialEmail: string
+  onDone: () => void
+  onBack: () => void
+}) {
+  const [step, setStep] = useState<'email' | 'reset'>('email')
+  const [email, setEmail] = useState(initialEmail)
+  const [code, setCode] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPw, setConfirmPw] = useState('')
+  const [error, setError] = useState('')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const { confirm, dialog } = useConfirm()
+
+  async function sendCode(e?: FormEvent) {
+    e?.preventDefault()
+    setError('')
+    const addr = email.trim()
+    if (!/^\S+@\S+\.\S+$/.test(addr)) { setError('Enter the email you use to sign in.'); return }
+    setBusy(true)
+    const { error: err } = await supabase.auth.resetPasswordForEmail(addr)
+    setBusy(false)
+    if (err) {
+      setError(/rate limit|security purposes/i.test(err.message) ? 'Too many tries. Please wait a few minutes, then try again.' : err.message)
+      return
+    }
+    setNote(`If ${addr} has a staff account, we sent it a reset code.`)
+    setCode('')
+    setStep('reset')
+  }
+
+  async function change() {
+    const addr = email.trim()
+    const { error: vErr } = await supabase.auth.verifyOtp({ email: addr, token: code, type: 'recovery' })
+    if (vErr) return /expired|invalid/i.test(vErr.message) ? 'That code is wrong or has expired. Check the email or send a new code.' : vErr.message
+    const { error: uErr } = await supabase.auth.updateUser({ password })
+    // Always end signed out: the person signs in again with the new password.
+    await supabase.auth.signOut()
+    if (uErr) return /different from the old/i.test(uErr.message) ? 'Choose a password different from your old one.' : uErr.message
+    onDone()
+    return null
+  }
+
+  function review(e: FormEvent) {
+    e.preventDefault()
+    setError('')
+    if (code.length < 6) { setError('Enter the code from the email.'); return }
+    if (!passwordOk(password)) { setError('Your new password does not meet all the requirements.'); return }
+    if (password !== confirmPw) { setError('Passwords do not match.'); return }
+    confirm({
+      title: 'Change your password?',
+      body: 'Your old password will stop working. You will sign in with the new one.',
+      confirmLabel: 'Change password',
+      busyLabel: 'Changing…',
+      action: change,
+    })
+  }
+
+  if (step === 'email') {
+    return (
+      <form onSubmit={sendCode}>
+        <div className="auth-icon"><KeyRound size={22} /></div>
+        <h1>Forgot your password?</h1>
+        <p className="auth-sub">Enter the email you use to sign in. We'll send you a code to set a new password.</p>
+        <Field label="Email" icon={<Mail size={17} />}>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required autoFocus />
+        </Field>
+        {error ? <p className="err">{error}</p> : null}
+        <button className="btn btn-primary btn-block" type="submit" disabled={busy}>
+          {busy ? 'Sending code…' : 'Send reset code'}
+        </button>
+        <div className="auth-foot center">
+          <button className="link" type="button" onClick={onBack}>Back to sign in</button>
+        </div>
+      </form>
+    )
+  }
+
+  const matches = confirmPw.length > 0 && confirmPw === password
+  return (
+    <form onSubmit={review}>
+      <div className="auth-icon"><MailCheck size={22} /></div>
+      <h1>Set a new password</h1>
+      <p className="auth-sub">{note} Enter it below with your new password.</p>
+      <input
+        className="code-input"
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        placeholder="••••••"
+        maxLength={10}
+        value={code}
+        onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+        aria-label="Reset code"
+        autoFocus
+      />
+      <Field label="New password" icon={<Lock size={17} />}>
+        <PasswordInput value={password} onChange={setPassword} autoComplete="new-password" />
+      </Field>
+      <ul className="pw-rules" aria-label="Password requirements">
+        {PASSWORD_RULES.map(([label, test]) => {
+          const met = test(password)
+          return (
+            <li key={label} className={met ? 'met' : undefined}>
+              {met ? <Check size={14} /> : <Circle size={14} />} {label}
+            </li>
+          )
+        })}
+      </ul>
+      <Field label="Confirm new password" icon={<Lock size={17} />}>
+        <PasswordInput value={confirmPw} onChange={setConfirmPw} autoComplete="new-password" />
+      </Field>
+      {confirmPw ? <p className={matches ? 'hint ok' : 'hint'}>{matches ? 'Passwords match.' : 'Passwords do not match yet.'}</p> : null}
+      {error ? <p className="err">{error}</p> : null}
+      <button className="btn btn-primary btn-block" type="submit">Change password</button>
+      <div className="auth-foot">
+        <button className="link" type="button" onClick={() => sendCode()} disabled={busy}>{busy ? 'Sending…' : 'Send a new code'}</button>
+        <button className="link" type="button" onClick={onBack}>Back to sign in</button>
+      </div>
+      {dialog}
+    </form>
+  )
+}
+
 export function StaffLoginPage() {
   const { signIn, signOut } = useAuth()
   const navigate = useNavigate()
@@ -174,7 +301,8 @@ export function StaffLoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [step, setStep] = useState<'login' | 'verify' | 'pending'>('login')
+  const [step, setStep] = useState<'login' | 'verify' | 'pending' | 'forgot'>('login')
+  const [notice, setNotice] = useState('')
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -198,7 +326,13 @@ export function StaffLoginPage() {
 
   return (
     <AuthShell>
-      {step === 'verify' ? (
+      {step === 'forgot' ? (
+        <ForgotPassword
+          initialEmail={email.trim()}
+          onBack={() => setStep('login')}
+          onDone={() => { setPassword(''); setError(''); setNotice('Your password was changed. Sign in with your new password.'); setStep('login') }}
+        />
+      ) : step === 'verify' ? (
         <CodeStep email={email.trim()} onVerified={() => { signOut(); setStep('pending') }} onBack={() => setStep('login')} />
       ) : step === 'pending' ? (
         <PendingNotice
@@ -209,12 +343,16 @@ export function StaffLoginPage() {
         <form onSubmit={submit}>
           <h1>Staff sign in</h1>
           <p className="auth-sub">Sign in to the PawTrack staff desk.</p>
+          {notice ? <p className="hint ok auth-notice"><Check size={15} /> {notice}</p> : null}
           <Field label="Email" icon={<Mail size={17} />}>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
           </Field>
           <Field label="Password" icon={<Lock size={17} />}>
             <PasswordInput value={password} onChange={setPassword} autoComplete="current-password" />
           </Field>
+          <div className="forgot-row">
+            <button className="link" type="button" onClick={() => { setError(''); setNotice(''); setStep('forgot') }}>Forgot password?</button>
+          </div>
           {error ? <p className="err">{error}</p> : null}
           <button className="btn btn-primary btn-block" type="submit" disabled={busy}>
             {busy ? 'Signing in…' : 'Sign in'}

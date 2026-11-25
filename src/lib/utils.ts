@@ -24,6 +24,20 @@ export function ago(iso: string) {
   return `${Math.round(h / 24)}d ago`
 }
 
+/** Today's date as YYYY-MM-DD in the viewer's own time zone. */
+export function localDate(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** Whole calendar days since a date (0 = today), in local time. */
+export function calendarDaysSince(iso: string) {
+  const start = new Date(iso)
+  const a = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime()
+  const now = new Date()
+  const b = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  return Math.max(0, Math.round((b - a) / 86400000))
+}
+
 export function daysIn(dog: Pick<Dog, 'intake_at'>) {
   if (!dog.intake_at) return 0
   return Math.max(0, Math.round((Date.now() - new Date(dog.intake_at).getTime()) / 86400000))

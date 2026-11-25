@@ -11,6 +11,7 @@ This folder is the native React remake of the vanilla PawTrack app. The original
 5. Staff apply for an account on `/staff-apply` and verify their email with a code, so in **Authentication**:
    - **Sign In / Providers:** keep **Allow new users to sign up** and **Confirm email** turned on.
    - **Email Templates → Confirm signup:** put the code in the email, for example `Your PawTrack verification code is {{ .Token }}`.
+   - **Email Templates → Reset Password:** same for "Forgot password?" on the staff sign-in page, for example `Your PawTrack password reset code is {{ .Token }}`.
    - **SMTP Settings:** Supabase's built-in email only reaches members of your Supabase team and sends very few emails per hour. Set up a free SMTP provider (for example Resend or Brevo) so applicants actually receive their code.
 6. In **Authentication → Users**, create (tick **Auto Confirm User**):
    - `admin@pawtrack.app` / a password you choose
