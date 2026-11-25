@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { PublicLayout } from '../components/PublicLayout'
 import { Modal } from '../components/Modal'
+import { useLeaveGuard } from '../components/useLeaveGuard'
 import { ArrowLeft, ArrowRight, CheckCircle2, Circle, Download, HeartHandshake, Loader2, Send } from 'lucide-react'
 
 const PURPOSES = ['General Fund', 'Dog Food & Supplies', 'Veterinary Care', 'Spay & Neuter Program', 'Shelter Upkeep']
@@ -43,6 +44,8 @@ export function DonatePage() {
   const ready = amountOk && refOk
 
   const [confirming, setConfirming] = useState(false)
+  const dirty = step === 'details' || step !== 'done' && !!(amount || reference.trim() || name.trim() || email.trim() || message.trim() || receipt)
+  const { leaveDialog } = useLeaveGuard(dirty, { what: 'this donation' })
 
   function review(e: FormEvent) {
     e.preventDefault()
@@ -279,6 +282,7 @@ export function DonatePage() {
           </div>
         </Modal>
       ) : null}
+      {leaveDialog}
     </PublicLayout>
   )
 }
@@ -307,6 +311,8 @@ export function ContactPage() {
   const [error, setError] = useState('')
   const [step, setStep] = useState<'form' | 'confirm' | 'sent'>('form')
   const [busy, setBusy] = useState(false)
+  const dirty = step !== 'sent' && !!(name.trim() || email.trim() || text.trim())
+  const { leaveDialog } = useLeaveGuard(dirty, { what: 'this message' })
 
   function review(e: FormEvent) {
     e.preventDefault()
@@ -384,6 +390,7 @@ export function ContactPage() {
           </div>
         </Modal>
       ) : null}
+      {leaveDialog}
     </PublicLayout>
   )
 }

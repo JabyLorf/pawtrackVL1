@@ -4,6 +4,7 @@ import { App } from '@capacitor/app'
 import { LogOut } from 'lucide-react'
 import { isNativeApp } from '../lib/app'
 import { Modal } from './Modal'
+import { handleFormBack } from './useLeaveGuard'
 
 // Pages where Android's back button would leave the app instead of going back.
 const ROOTS = new Set(['/', '/ops', '/staff-login'])
@@ -24,6 +25,8 @@ export function AppBackHandler() {
     const sub = App.addListener('backButton', ({ canGoBack }) => {
       const { path, asking: open } = state.current
       if (open) { setAsking(false); return }
+      // An open popup form (like the adoption form) closes first.
+      if (handleFormBack()) return
       if (canGoBack && !ROOTS.has(path)) { navigate(-1); return }
       setAsking(true)
     })

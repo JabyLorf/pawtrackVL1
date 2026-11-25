@@ -20,9 +20,11 @@ import {
 import { useAuth } from '../context/AuthContext'
 import { useDevice } from '../context/DeviceContext'
 import { supabase } from '../lib/supabase'
+import { useSignOut } from './useSignOut'
 
 export function OpsLayout() {
-  const { profile, isStaff, isAdmin, loading, signOut } = useAuth()
+  const { profile, isStaff, isAdmin, loading } = useAuth()
+  const { askSignOut, signOutDialog } = useSignOut()
   const { compact } = useDevice()
   const navigate = useNavigate()
   const location = useLocation()
@@ -71,11 +73,12 @@ export function OpsLayout() {
               : 'Sign in with an approved staff or administrator account.'}
           </p>
           {profile ? (
-            <button className="btn btn-light btn-block" type="button" onClick={() => signOut().then(() => navigate('/'))}>Sign out</button>
+            <button className="btn btn-light btn-block" type="button" onClick={askSignOut}>Sign out</button>
           ) : (
             <button className="btn btn-primary btn-block" type="button" onClick={() => navigate('/staff-login')}>Go to staff sign in</button>
           )}
         </div>
+        {signOutDialog}
       </div>
     )
   }
@@ -138,7 +141,7 @@ export function OpsLayout() {
             </div>
           </div>
           <button className="ops-item" type="button" onClick={() => navigate('/')}><Globe size={18} /><span>Public website</span></button>
-          <button className="ops-item" type="button" onClick={() => signOut().then(() => navigate('/'))}><LogOut size={18} /><span>Sign out</span></button>
+          <button className="ops-item" type="button" onClick={askSignOut}><LogOut size={18} /><span>Sign out</span></button>
         </div>
       </aside>
       <div className="ops-main">
@@ -170,6 +173,7 @@ export function OpsLayout() {
           </NavLink>
         </nav>
       ) : null}
+      {signOutDialog}
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { Dog } from '../types'
 import { Modal } from './Modal'
+import { useLeaveGuard } from './useLeaveGuard'
 
 export function AdoptForm({ dog, onClose }: { dog: Dog; onClose: () => void }) {
   const [step, setStep] = useState<'form' | 'confirm' | 'done'>('form')
@@ -19,6 +20,10 @@ export function AdoptForm({ dog, onClose }: { dog: Dog; onClose: () => void }) {
     pets: 'None',
     note: '',
   })
+
+  const dirty = step !== 'done' && !!(draft.name.trim() || draft.email.trim() || draft.phone.trim() || draft.address.trim() || draft.note.trim() || idFile)
+  const { leaveDialog, confirmLeave } = useLeaveGuard(dirty, { what: 'this adoption request', onClose })
+  const close = () => confirmLeave(onClose)
 
   function onId(file: File | null) {
     setIdFile(file)
@@ -77,10 +82,11 @@ export function AdoptForm({ dog, onClose }: { dog: Dog; onClose: () => void }) {
   )
 
   return (
-    <Modal onClose={onClose}>
+    <>
+    <Modal onClose={close}>
       <div className="create-head">
         <b>{step === 'done' ? 'Application submitted' : `Adopt ${dog.name}`}</b>
-        <button className="chat-x" type="button" onClick={onClose} aria-label="Close"><X size={18} /></button>
+        <button className="chat-x" type="button" onClick={close} aria-label="Close"><X size={18} /></button>
       </div>
       <div className="adopt-card-body">
         {step === 'form' ? (
@@ -153,10 +159,12 @@ export function AdoptForm({ dog, onClose }: { dog: Dog; onClose: () => void }) {
           <div>
             <h3>Application submitted</h3>
             <p className="muted">Staff will reach you at {draft.phone}. A valid ID photo was attached.</p>
-            <button className="btn btn-light btn-pill" type="button" onClick={onClose}>Close</button>
+            <button className="btn btn-light btn-pill" type="button" onClick={close}>Close</button>
           </div>
         ) : null}
       </div>
     </Modal>
+    {leaveDialog}
+    </>
   )
 }

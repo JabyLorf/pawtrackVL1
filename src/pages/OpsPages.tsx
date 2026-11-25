@@ -10,6 +10,7 @@ import { useDevice } from '../context/DeviceContext'
 import { useAuth } from '../context/AuthContext'
 import { Modal } from '../components/Modal'
 import { ConfirmDialog, useConfirm } from '../components/ConfirmDialog'
+import { useLeaveGuard } from '../components/useLeaveGuard'
 import { ClipboardList, HandCoins, HeartHandshake, Inbox, PawPrint, Stethoscope, Syringe, Tag, UserCheck, UserX, X, Reply, Users, Check, Loader2, Send, Trash2, RotateCcw, Plus, CheckCircle2, Image as ImageIcon, Pencil } from 'lucide-react'
 
 function Kpi({ icon, n, l, tone }: { icon: ReactNode; n: ReactNode; l: string; tone?: 'warn' | 'muted' }) {
@@ -452,11 +453,15 @@ export function DogEditPage() {
   const busy = useRef(false)
   const { isAdmin } = useAuth()
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // What the form looked like when it opened, to tell if anything was typed.
+  const [original, setOriginal] = useState(() => JSON.stringify(dog))
+  const dirty = JSON.stringify(dog) !== original || !!file || !!pupName.trim()
+  const { leaveDialog, allowLeave } = useLeaveGuard(dirty, { what: isNew ? 'adding this dog' : 'editing this dog' })
 
   useEffect(() => {
     if (isNew) return
     supabase.from('dogs').select('*').eq('id', id).maybeSingle().then(({ data }) => {
-      if (data) setDog(data as Dog)
+      if (data) { setDog(data as Dog); setOriginal(JSON.stringify(data)) }
     })
     supabase.from('dogs').select('*').eq('mother_id', id).then(({ data }) => setPups((data as Dog[]) || []))
   }, [id, isNew])
@@ -502,10 +507,12 @@ export function DogEditPage() {
     if (isNew) {
       const { data, error: err } = await supabase.from('dogs').insert(payload).select('id').single()
       if (err) { setError(err.message); return }
+      allowLeave()
       navigate(`/ops/dogs?open=${data.id}`, { state: { flash: `${payload.name} was added to the Pet Register.` } })
     } else {
       const { error: err } = await supabase.from('dogs').update(payload).eq('id', id)
       if (err) { setError(err.message); return }
+      allowLeave()
       navigate(`/ops/dogs?open=${id}`, { state: { flash: `Changes to ${payload.name} were saved.` } })
     }
   }
@@ -601,6 +608,7 @@ export function DogEditPage() {
           onConfirm={async () => {
             const { error: err } = await supabase.rpc('delete_dog', { p_id: id })
             if (err) return err.message
+            allowLeave()
             navigate('/ops/dogs', { state: { flash: `${dog.name} moved to Recently deleted. Restore it there within 7 days if this was a mistake.` } })
             return null
           }}
@@ -633,6 +641,7 @@ export function DogEditPage() {
         </div>
       ) : null}
       {dialog}
+      {leaveDialog}
     </div>
   )
 }

@@ -4,9 +4,11 @@ import { useAuth } from '../context/AuthContext'
 import { Clock, HandHeart, Home, Info, LayoutDashboard, LogIn, LogOut, Mail, MapPin, Menu, PawPrint, Phone, X } from 'lucide-react'
 import { showAppLinks } from '../lib/app'
 import { GetAppButtons } from './IosInstall'
+import { useSignOut } from './useSignOut'
 
 export function PublicLayout({ children }: { children: ReactNode }) {
-  const { profile, isStaff, signOut } = useAuth()
+  const { profile, isStaff } = useAuth()
+  const { askSignOut, signOutDialog } = useSignOut()
   const navigate = useNavigate()
   const location = useLocation()
   const [open, setOpen] = useState(false)
@@ -37,7 +39,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
   const account = isStaff ? (
     <NavLink className="btn btn-primary btn-sm" to="/ops"><LayoutDashboard size={16} /> Staff desk</NavLink>
   ) : profile ? (
-    <button className="btn btn-light btn-sm" type="button" onClick={() => signOut().then(() => navigate('/'))}><LogOut size={16} /> Sign out</button>
+    <button className="btn btn-light btn-sm" type="button" onClick={askSignOut}><LogOut size={16} /> Sign out</button>
   ) : (
     <NavLink className="btn btn-primary btn-sm" to="/staff-login"><LogIn size={16} /> Staff sign in</NavLink>
   )
@@ -121,6 +123,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           <div className="foot-bottom">© {new Date().getFullYear()} Ormoc Strays Oasis, Incorporated</div>
         </div>
       </footer>
+      {signOutDialog}
     </div>
   )
 }
