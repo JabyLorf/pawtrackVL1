@@ -41,6 +41,7 @@ const KIND_LABEL: Record<string, string> = {
   adoption: 'Adoption application',
   donation: 'Donation',
   staff: 'Staff application',
+  report: 'Community report',
 }
 
 const cors = {
@@ -243,7 +244,11 @@ Deno.serve(async (req) => {
   const kind = KIND_LABEL[msg.kind] || 'Message'
   const sender = looksLikeEmail(msg.email) ? msg.email.trim() : ''
   const foot = (sender ? 'Reply to this email to answer them directly.' : 'They did not leave an email address.') +
-    (SITE_URL ? ` · <a href="${SITE_URL}/ops/inbox" style="color:#0f766e">Open the staff inbox</a>` : '')
+    (SITE_URL
+      ? msg.kind === 'report'
+        ? ` · <a href="${SITE_URL}/ops/reports" style="color:#0f766e">Review it on the Reports page</a>`
+        : ` · <a href="${SITE_URL}/ops/inbox" style="color:#0f766e">Open the staff inbox</a>`
+      : '')
 
   const err = await sendMail({
     to: ADMIN_EMAIL,

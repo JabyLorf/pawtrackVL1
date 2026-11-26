@@ -7,9 +7,11 @@ type AuthState = {
   profile: Profile | null
   isStaff: boolean
   isAdmin: boolean
+  /** Signed in with an active account (member or staff): can post, like, follow. */
+  canPost: boolean
   reloadProfile: () => Promise<void>
   signIn: (email: string, password: string) => Promise<string | null>
-  signUp: (email: string, password: string, username: string, name: string) => Promise<string | null>
+  signUp: (email: string, password: string, username: string, name: string, member?: boolean) => Promise<string | null>
   verifySignupOtp: (email: string, token: string) => Promise<string | null>
   resendSignupOtp: (email: string) => Promise<string | null>
   signOut: () => Promise<void>
@@ -54,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       isStaff: !!profile && (profile.role === 'staff' || profile.role === 'admin') && profile.status === 'active',
       isAdmin: !!profile && profile.role === 'admin' && profile.status === 'active',
+      canPost: !!profile && profile.status === 'active',
       async reloadProfile() {
         const { data } = await supabase.auth.getUser()
         if (data.user) await loadProfile(data.user.id)
@@ -62,11 +65,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         return authMessage(error)
       },
-      async signUp(email, password, username, name) {
+      async signUp(email, password, username, name, member = false) {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { username, display_name: name } },
+          options: { data: { username, display_name: name, ...(member ? { account_type: 'member' } : {}) } },
         })
         return authMessage(error)
       },

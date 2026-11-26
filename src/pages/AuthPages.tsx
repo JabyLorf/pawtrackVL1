@@ -23,7 +23,7 @@ import { authMessage, supabase } from '../lib/supabase'
 import { PASSWORD_RULES, passwordOk } from '../lib/utils'
 import { useConfirm } from '../components/ConfirmDialog'
 
-function AuthShell({ children }: { children: ReactNode }) {
+export function AuthShell({ children, side }: { children: ReactNode; side?: ReactNode }) {
   return (
     <div className="auth-wrap">
       <aside className="auth-side">
@@ -32,13 +32,17 @@ function AuthShell({ children }: { children: ReactNode }) {
           PawTrack
         </Link>
         <div className="auth-side-body">
-          <h2>Shelter operations for Ormoc Strays Oasis</h2>
-          <p>One place for the team to track every dog, adoption and donation.</p>
-          <ul className="auth-points">
-            <li><ShieldCheck size={18} /> Staff accounts are approved by an administrator</li>
-            <li><Users size={18} /> Shared dog register, adoptions and inbox</li>
-            <li><MailCheck size={18} /> Email verification on every new account</li>
-          </ul>
+          {side || (
+            <>
+              <h2>Shelter operations for Ormoc Strays Oasis</h2>
+              <p>One place for the team to track every dog, adoption and donation.</p>
+              <ul className="auth-points">
+                <li><ShieldCheck size={18} /> Staff accounts are approved by an administrator</li>
+                <li><Users size={18} /> Shared dog register, adoptions and inbox</li>
+                <li><MailCheck size={18} /> Email verification on every new account</li>
+              </ul>
+            </>
+          )}
         </div>
         <small>Ormoc Strays Oasis, Incorporated</small>
       </aside>
@@ -50,7 +54,7 @@ function AuthShell({ children }: { children: ReactNode }) {
   )
 }
 
-function Field({
+export function Field({
   label,
   icon,
   children,
@@ -70,7 +74,7 @@ function Field({
   )
 }
 
-function PasswordInput({
+export function PasswordInput({
   value,
   onChange,
   autoComplete,
@@ -96,7 +100,7 @@ function PasswordInput({
   )
 }
 
-function CodeStep({
+export function CodeStep({
   email,
   onVerified,
   onBack,
@@ -170,7 +174,7 @@ function PendingNotice({ title, body }: { title: string; body: string }) {
 }
 
 /** Forgot password: email → code + new password → back to sign in. */
-function ForgotPassword({ initialEmail, onDone, onBack }: {
+export function ForgotPassword({ initialEmail, onDone, onBack }: {
   initialEmail: string
   onDone: () => void
   onBack: () => void
@@ -291,6 +295,21 @@ function ForgotPassword({ initialEmail, onDone, onBack }: {
   )
 }
 
+export function PasswordRules({ password }: { password: string }) {
+  return (
+    <ul className="pw-rules" aria-label="Password requirements">
+      {PASSWORD_RULES.map(([label, test]) => {
+        const met = test(password)
+        return (
+          <li key={label} className={met ? 'met' : undefined}>
+            {met ? <Check size={14} /> : <Circle size={14} />} {label}
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
 export function StaffLoginPage() {
   const { signIn, signOut } = useAuth()
   const navigate = useNavigate()
@@ -313,8 +332,9 @@ export function StaffLoginPage() {
       return
     }
     const { data } = await supabase.auth.getUser()
-    const { data: p } = await supabase.from('profiles').select('status').eq('id', data.user?.id || '').maybeSingle()
+    const { data: p } = await supabase.from('profiles').select('status, role').eq('id', data.user?.id || '').maybeSingle()
     setBusy(false)
+    if (p?.status === 'active' && p?.role === 'client') { navigate('/community'); return }
     if (p?.status === 'active') { navigate('/ops'); return }
     await signOut()
     if (p?.status === 'pending') { setStep('pending'); return }

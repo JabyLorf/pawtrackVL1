@@ -1,4 +1,5 @@
-export type UserRole = 'staff' | 'admin' | 'volunteer'
+// 'client' = community member: active, but no access to the staff desk.
+export type UserRole = 'staff' | 'admin' | 'volunteer' | 'client'
 export type AccountStatus = 'active' | 'pending' | 'suspended'
 export type DogSex = 'Female' | 'Male'
 export type DogAge = 'Puppy' | 'Young Adult' | 'Adult' | 'Senior'
@@ -13,7 +14,7 @@ export type DogStatus =
 export type AdoptionStatus = 'pending' | 'approved' | 'rejected'
 export type DonationStatus = 'pending' | 'confirmed' | 'rejected'
 export type DonationMethod = 'GCash' | 'GoTyme' | 'Bank Transfer' | 'Cash / Walk-in' | 'In-kind Donation'
-export type MessageKind = 'contact' | 'adoption' | 'donation' | 'staff'
+export type MessageKind = 'contact' | 'adoption' | 'donation' | 'staff' | 'report'
 
 export type Profile = {
   id: string
@@ -23,7 +24,54 @@ export type Profile = {
   role: UserRole
   status: AccountStatus
   created_at: string
+  bio?: string
+  avatar_url?: string
 }
+
+/** A post on the Community feed, as returned by community_posts(). */
+export type Post = {
+  id: string
+  body: string
+  photo_url: string
+  dog_id: string | null
+  dog_name: string | null
+  created_at: string
+  author_id: string
+  username: string
+  display_name: string
+  avatar_url: string
+  is_shelter: boolean
+  likes: number
+  comments: number
+  liked: boolean
+}
+
+export type PostComment = {
+  id: string
+  body: string
+  created_at: string
+  author_id: string
+  username: string
+  display_name: string
+  avatar_url: string
+  is_shelter: boolean
+}
+
+export type CommunityProfile = {
+  id: string
+  username: string
+  display_name: string
+  avatar_url: string
+  bio: string
+  is_shelter: boolean
+  joined: string
+  posts: number
+  followers: number
+  following: number
+  followed_by_me: boolean
+}
+
+export type Person = Pick<CommunityProfile, 'id' | 'username' | 'display_name' | 'avatar_url' | 'is_shelter'>
 
 export type Dog = {
   id: string

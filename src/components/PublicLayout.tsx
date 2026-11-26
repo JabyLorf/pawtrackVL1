@@ -1,14 +1,17 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { Clock, HandHeart, Home, Info, LayoutDashboard, LogIn, LogOut, Mail, MapPin, Menu, PawPrint, Phone, X } from 'lucide-react'
+import { Bell, Clock, HandHeart, MessageCircle, Users, Home, Info, LayoutDashboard, LogIn, LogOut, Mail, MapPin, Menu, PawPrint, Phone, X } from 'lucide-react'
 import { showAppLinks } from '../lib/app'
 import { GetAppButtons } from './IosInstall'
 import { useSignOut } from './useSignOut'
+import { Avatar } from './Avatar'
+import { useUnread } from './useUnread'
 
 export function PublicLayout({ children }: { children: ReactNode }) {
   const { profile, isStaff } = useAuth()
   const { askSignOut, signOutDialog } = useSignOut()
+  const unread = useUnread()
   const navigate = useNavigate()
   const location = useLocation()
   const [open, setOpen] = useState(false)
@@ -31,6 +34,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
   const links: Array<[string, string, ReactNode]> = [
     ['/', 'Home', <Home size={18} />],
     ['/adopt', 'Adopt', <PawPrint size={18} />],
+    ['/community', 'Community', <Users size={18} />],
     ['/donate', 'Donate', <HandHeart size={18} />],
     ['/about', 'About', <Info size={18} />],
     ['/contact', 'Contact', <Mail size={18} />],
@@ -38,11 +42,27 @@ export function PublicLayout({ children }: { children: ReactNode }) {
 
   const account = isStaff ? (
     <NavLink className="btn btn-primary btn-sm" to="/ops"><LayoutDashboard size={16} /> Staff desk</NavLink>
+  ) : profile && profile.status === 'active' ? (
+    <NavLink className="btn btn-light btn-sm me-btn" to={`/community/u/${profile.username}`}>
+      <Avatar src={profile.avatar_url} name={profile.display_name} size={22} /> {profile.display_name.split(' ')[0]}
+    </NavLink>
   ) : profile ? (
     <button className="btn btn-light btn-sm" type="button" onClick={askSignOut}><LogOut size={16} /> Sign out</button>
   ) : (
     <NavLink className="btn btn-primary btn-sm" to="/staff-login"><LogIn size={16} /> Staff sign in</NavLink>
   )
+
+  const badge = (n: number) => (n ? <span className="hdr-badge">{n > 99 ? '99+' : n}</span> : null)
+  const alerts = profile && profile.status === 'active' ? (
+    <>
+      <NavLink className={({ isActive }) => 'nav-icon' + (isActive ? ' on' : '')} to="/community/notifications" aria-label={`Notifications${unread.notifications ? `, ${unread.notifications} new` : ''}`}>
+        <Bell size={20} />{badge(unread.notifications)}
+      </NavLink>
+      <NavLink className={({ isActive }) => 'nav-icon' + (isActive ? ' on' : '')} to="/messages" aria-label={`Messages${unread.chats ? `, ${unread.chats} unread` : ''}`}>
+        <MessageCircle size={20} />{badge(unread.chats)}
+      </NavLink>
+    </>
+  ) : null
 
   return (
     <div className="site-shell">
@@ -55,6 +75,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
               <small>Ormoc Strays Oasis</small>
             </span>
           </button>
+          {alerts ? <div className="nav-alerts phone-only">{alerts}</div> : null}
           <button
             className="nav-toggle"
             type="button"
@@ -69,6 +90,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
             {links.map(([to, label]) => (
               <NavLink key={to} className={({ isActive }) => 'linkish' + (isActive ? ' on' : '')} to={to} end>{label}</NavLink>
             ))}
+            {alerts ? <span className="nav-alerts">{alerts}</span> : null}
             {account}
           </nav>
         </div>

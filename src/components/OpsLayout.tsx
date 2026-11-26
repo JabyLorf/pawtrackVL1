@@ -2,6 +2,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useState, type ReactNode } from 'react'
 import {
   ClipboardList,
+  Flag,
   Globe,
   HandCoins,
   HeartHandshake,
@@ -33,6 +34,7 @@ export function OpsLayout() {
   const [pending, setPending] = useState(0)
   const [applications, setApplications] = useState(0)
   const [donationsPending, setDonationsPending] = useState(0)
+  const [openReports, setOpenReports] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
@@ -40,6 +42,7 @@ export function OpsLayout() {
     supabase.from('inbox_messages').select('id', { count: 'exact', head: true }).eq('read', false).then(({ count }) => setUnread(count || 0))
     supabase.from('adoptions').select('id', { count: 'exact', head: true }).eq('status', 'pending').then(({ count }) => setPending(count || 0))
     supabase.from('donations').select('id', { count: 'exact', head: true }).eq('status', 'pending').then(({ count }) => setDonationsPending(count || 0))
+    supabase.from('reports').select('id', { count: 'exact', head: true }).eq('status', 'open').then(({ count }) => setOpenReports(count || 0))
   }, [isStaff, location.pathname])
 
   useEffect(() => {
@@ -127,6 +130,7 @@ export function OpsLayout() {
         <Item to="/ops/adoptions" label="Adoptions" icon={<ClipboardList size={18} />} badge={pending} />
         <Item to="/ops/donations" label="Donations" icon={<HandCoins size={18} />} badge={donationsPending} />
         <Item to="/ops/inbox" label="Inbox" icon={<Inbox size={18} />} badge={unread} />
+        <Item to="/ops/reports" label="Reports" icon={<Flag size={18} />} badge={openReports} />
         {isAdmin ? (
           <>
             <div className="ops-group">Administration</div>
@@ -142,6 +146,7 @@ export function OpsLayout() {
               <small>{isAdmin ? 'Administrator' : 'Staff'}</small>
             </div>
           </div>
+          <button className="ops-item" type="button" onClick={() => navigate('/community')}><Users size={18} /><span>Community</span></button>
           <button className="ops-item" type="button" onClick={() => navigate('/')}><Globe size={18} /><span>Public website</span></button>
           <button className="ops-item" type="button" onClick={askSignOut}><LogOut size={18} /><span>Sign out</span></button>
         </div>

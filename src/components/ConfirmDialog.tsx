@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import { Modal } from './Modal'
 
@@ -38,7 +39,8 @@ export function ConfirmDialog({
     if (err) setError(err)
   }
 
-  return (
+  // On <body>, so it shows above other popups and isn't styled by its parent.
+  return createPortal(
     <Modal onClose={() => { if (!running.current) onClose() }}>
       <div className="dialog">
         <div className={'auth-icon' + (danger ? ' danger' : ' warn')}><AlertTriangle size={22} /></div>
@@ -52,7 +54,8 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </Modal>
+    </Modal>,
+    document.body,
   )
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { ago, calendarDaysSince, dogMatches, localDate, inCare, isListed, peso, statusClass } from '../lib/utils'
@@ -1295,8 +1295,8 @@ export function DonationsPage() {
   )
 }
 
-const KIND_LABEL: Record<string, string> = { contact: 'Message', adoption: 'Adoption', donation: 'Donation', staff: 'Staff application' }
-const KIND_CLASS: Record<string, string> = { contact: 'adopted', adoption: 'pending', donation: 'active', staff: 'pending' }
+const KIND_LABEL: Record<string, string> = { contact: 'Message', adoption: 'Adoption', donation: 'Donation', staff: 'Staff application', report: 'Community report' }
+const KIND_CLASS: Record<string, string> = { contact: 'adopted', adoption: 'pending', donation: 'active', staff: 'pending', report: 'dead' }
 
 type InboxReply = { id: string; message_id: string; body: string; sent_by_name: string; created_at: string }
 
@@ -1442,6 +1442,161 @@ export function InboxPage() {
           }}
         />
       )) : <p className="empty panel">No messages yet.</p>}
+    </div>
+  )
+}
+
+// ---- Community reports --------------------------------------------------------
+
+type StaffReport = {
+  id: string
+  target_kind: 'post' | 'comment' | 'user' | 'message'
+  target_id: string
+  reason: string
+  details: string
+  status: string
+  resolution: string
+  created_at: string
+  reports: number
+  reporter_name: string | null
+  reporter_username: string | null
+  author_id: string | null
+  author_name: string | null
+  author_username: string | null
+  author_status: string | null
+  preview_text: string | null
+  preview_photo: string | null
+  post_id: string | null
+  exists_still: boolean
+}
+
+type Suspended = { id: string; username: string; display_name: string; avatar_url: string; created_at: string }
+
+const REPORT_WHAT: Record<StaffReport['target_kind'], string> = { post: 'Post', comment: 'Comment', user: 'Account', message: 'Private message' }
+
+export function ReportsPage() {
+  const { isAdmin } = useAuth()
+  const { confirm, dialog } = useConfirm()
+  const [tab, setTab] = useState<'open' | 'resolved' | 'dismissed'>('open')
+  const [rows, setRows] = useState<StaffReport[] | null>(null)
+  const [suspended, setSuspended] = useState<Suspended[]>([])
+
+  const load = useCallback(async () => {
+    const { data } = await supabase.rpc('staff_reports', { p_status: tab })
+    setRows((data as StaffReport[]) || [])
+    if (isAdmin) {
+      const { data: s } = await supabase.rpc('suspended_members')
+      setSuspended((s as Suspended[]) || [])
+    }
+  }, [tab, isAdmin])
+  useEffect(() => { setRows(null); load() }, [load])
+
+  function act(r: StaffReport, action: 'dismiss' | 'remove' | 'suspend') {
+    const thing = REPORT_WHAT[r.target_kind].toLowerCase()
+    const who = r.author_name || 'this person'
+    const text = {
+      dismiss: { title: 'Dismiss this report?', body: `Nothing will be removed. All open reports about this ${thing} will be closed.`, label: 'Dismiss', danger: false },
+      remove: { title: `Remove this ${thing}?`, body: `The ${thing} by ${who} will be removed for good, and the reports about it closed.`, label: `Remove ${thing}`, danger: true },
+      suspend: { title: `Suspend ${who}?`, body: `${who} won't be able to sign in to post, comment or message, and their posts are hidden. You can restore the account later.`, label: 'Suspend account', danger: true },
+    }[action]
+    confirm({
+      title: text.title,
+      body: text.body,
+      confirmLabel: text.label,
+      danger: text.danger,
+      action: async () => {
+        const { error } = await supabase.rpc('resolve_report', { p_id: r.id, p_action: action })
+        if (error) return error.message
+        load()
+        return null
+      },
+    })
+  }
+
+  const link = (r: StaffReport) =>
+    r.target_kind === 'post' || r.target_kind === 'comment' ? (r.post_id ? `/community/p/${r.post_id}` : null)
+      : r.target_kind === 'user' && r.author_username ? `/community/u/${r.author_username}` : null
+
+  return (
+    <div>
+      <h1 className="page-h1">Reports</h1>
+      <p className="page-sub">Posts, comments, accounts and messages that Community members reported. Review each one and decide what to do.</p>
+      <div className="feed-tabs ops-tabs" role="tablist">
+        {(['open', 'resolved', 'dismissed'] as const).map((t) => (
+          <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} type="button" onClick={() => setTab(t)}>
+            {t === 'open' ? 'Open' : t === 'resolved' ? 'Resolved' : 'Dismissed'}
+          </button>
+        ))}
+      </div>
+      {rows === null ? <p className="empty">Loading…</p> : rows.length === 0 ? (
+        <p className="empty panel">{tab === 'open' ? 'No open reports. All clear!' : 'Nothing here yet.'}</p>
+      ) : (
+        <div className="report-list">
+          {rows.map((r) => {
+            const href = link(r)
+            return (
+              <div key={r.id} className="panel report-card">
+                <div className="report-top">
+                  <span className="status dead">{r.reason}</span>
+                  <b>{REPORT_WHAT[r.target_kind]}</b>
+                  {r.reports > 1 ? <span className="status pending">{r.reports} reports</span> : null}
+                  <span className="muted small">{ago(r.created_at)} · by {r.reporter_name || 'a member'}</span>
+                </div>
+                {r.details ? <p className="report-details">"{r.details}"</p> : null}
+                <div className="report-preview">
+                  {!r.exists_still ? <p className="muted">This was already deleted.</p> : (
+                    <>
+                      {r.preview_photo ? <img src={r.preview_photo} alt="" /> : null}
+                      <div>
+                        <p className="muted small">
+                          {r.target_kind === 'user' ? 'Account' : 'Written by'}{' '}
+                          {r.author_username ? <Link to={`/community/u/${r.author_username}`}>{r.author_name} (@{r.author_username})</Link> : 'a deleted account'}
+                          {r.author_status === 'suspended' ? ' · suspended' : ''}
+                        </p>
+                        {r.preview_text ? <p className="report-text">{r.preview_text}</p> : <p className="muted small">{r.target_kind === 'user' ? 'No bio.' : 'Photo only.'}</p>}
+                        {href ? <Link className="small" to={href}>Open on the Community →</Link> : null}
+                      </div>
+                    </>
+                  )}
+                </div>
+                {r.status === 'open' ? (
+                  <div className="report-actions">
+                    <button className="btn btn-light btn-sm" type="button" onClick={() => act(r, 'dismiss')}>Dismiss</button>
+                    {r.target_kind !== 'user' && r.exists_still ? (
+                      <button className="btn btn-remove btn-sm" type="button" onClick={() => act(r, 'remove')}><Trash2 size={14} /> Remove {REPORT_WHAT[r.target_kind].toLowerCase()}</button>
+                    ) : null}
+                    {isAdmin && r.author_id && r.author_status === 'active' ? (
+                      <button className="btn btn-remove btn-sm" type="button" onClick={() => act(r, 'suspend')}><UserX size={14} /> Suspend account</button>
+                    ) : null}
+                  </div>
+                ) : <p className="muted small">{r.resolution}</p>}
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {isAdmin && suspended.length ? (
+        <div className="panel" style={{ marginTop: 24 }}>
+          <h3>Suspended member accounts</h3>
+          {suspended.map((u) => (
+            <div key={u.id} className="row wrap" style={{ justifyContent: 'space-between', padding: '8px 0', borderTop: '1px solid var(--line)' }}>
+              <span>{u.display_name} <span className="muted">@{u.username}</span></span>
+              <button className="btn btn-light btn-sm" type="button" onClick={() => confirm({
+                title: `Restore ${u.display_name}?`,
+                body: `${u.display_name} will be able to post, comment and message again, and their posts will show again.`,
+                confirmLabel: 'Restore account',
+                action: async () => {
+                  const { error } = await supabase.rpc('restore_member', { p_user: u.id })
+                  if (error) return error.message
+                  load()
+                  return null
+                },
+              })}><RotateCcw size={14} /> Restore</button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {dialog}
     </div>
   )
 }

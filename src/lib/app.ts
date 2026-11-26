@@ -24,3 +24,9 @@ export const isHomeScreenApp =
 
 // Whether to show "get the app" links at all.
 export const showAppLinks = !isNativeApp && !isHomeScreenApp
+
+// Public address of the website, for share links (the Android app runs from
+// a local address, so it uses the live site).
+export const SITE_URL =
+  (import.meta.env.VITE_SITE_URL as string | undefined) ||
+  (isNativeApp || typeof window === 'undefined' ? 'https://pawtrack.jarrybendijo.workers.dev' : window.location.origin)

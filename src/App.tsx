@@ -6,6 +6,8 @@ import { AppBackHandler } from './components/AppBackHandler'
 import { AdoptPage, HomePage } from './pages/PublicPages'
 import { AboutPage, ContactPage, DonatePage } from './pages/SitePages'
 import { StaffApplyPage, StaffLoginPage } from './pages/AuthPages'
+import { CommunityPage, JoinPage, NewPostPage, PostPage, ProfilePage } from './pages/CommunityPages'
+import { ChatPage, MessagesPage, NotificationsPage } from './pages/SocialPages'
 import {
   AdoptedPage,
   AdoptionsPage,
@@ -17,6 +19,7 @@ import {
   IntakePage,
   InboxPage,
   MortalityPage,
+  ReportsPage,
   StaffAdminPage,
 } from './pages/OpsPages'
 
@@ -39,6 +42,14 @@ const router = createBrowserRouter(
       <Route path="/donate" element={<DonatePage />} />
       <Route path="/about" element={<AboutPage />} />
       <Route path="/contact" element={<ContactPage />} />
+      <Route path="/community" element={<CommunityPage />} />
+      <Route path="/community/new" element={<NewPostPage />} />
+      <Route path="/community/p/:id" element={<PostPage />} />
+      <Route path="/community/u/:username" element={<ProfilePage />} />
+      <Route path="/community/notifications" element={<NotificationsPage />} />
+      <Route path="/messages" element={<MessagesPage />} />
+      <Route path="/messages/:id" element={<ChatPage />} />
+      <Route path="/join" element={<JoinPage />} />
       <Route path="/login" element={<Navigate to="/staff-login" replace />} />
       <Route path="/staff-login" element={<StaffLoginPage />} />
       <Route path="/staff-apply" element={<StaffApplyPage />} />
@@ -55,6 +66,7 @@ const router = createBrowserRouter(
         <Route path="donations" element={<DonationsPage />} />
         <Route path="inbox" element={<InboxPage />} />
         <Route path="staff" element={<StaffAdminPage />} />
+        <Route path="reports" element={<ReportsPage />} />
         <Route path="deleted" element={<DeletedDogsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
