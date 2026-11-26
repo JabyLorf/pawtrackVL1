@@ -15,6 +15,7 @@ import {
   MessageCircle,
   PawPrint,
   Pencil,
+  Repeat2,
   Send,
   Share2,
   Trash2,
@@ -34,6 +35,7 @@ import { Avatar } from '../components/Avatar'
 import { friendly, Name, share, Toast, useJoin } from '../components/CommunityUi'
 import { ReportDialog, type ReportKind } from '../components/ReportDialog'
 import { ShareSheet } from '../components/ShareSheet'
+import { SquareCropper } from '../components/SquareCropper'
 import { DogPeek } from '../components/DogPeek'
 import { useConfirm } from '../components/ConfirmDialog'
 import { useLeaveGuard } from '../components/useLeaveGuard'
@@ -91,6 +93,32 @@ function PostCard({ post, onChange, full, onOpenDog, onFollowed }: {
   const [following, setFollowing] = useState(false)
   const liking = useRef(false)
 
+  function toggleRepost() {
+    if (!canPost) { join(); return }
+    confirm(post.reposted ? {
+      title: 'Undo repost?',
+      body: 'It will be removed from your followers\' timelines.',
+      confirmLabel: 'Undo repost',
+      action: async () => {
+        const { error } = await supabase.from('reposts').delete().eq('post_id', post.id).eq('user_id', profile!.id)
+        if (error) return friendly(error.message)
+        onChange({ ...post, reposted: false, reposts: Math.max(0, post.reposts - 1) })
+        return null
+      },
+    } : {
+      title: 'Repost this?',
+      body: `${post.display_name}'s post will show again on the Community timeline, with "${profile!.display_name} reposted" above it.`,
+      confirmLabel: 'Repost',
+      action: async () => {
+        const { error } = await supabase.from('reposts').insert({ post_id: post.id })
+        if (error && !/duplicate/i.test(error.message)) return friendly(error.message)
+        onChange({ ...post, reposted: true, reposts: post.reposts + (error ? 0 : 1) })
+        setToast('Reposted')
+        return null
+      },
+    })
+  }
+
   async function followAuthor() {
     if (!canPost) { join(); return }
     if (following) return
@@ -121,6 +149,12 @@ function PostCard({ post, onChange, full, onOpenDog, onFollowed }: {
 
   return (
     <article className="post">
+      {post.reposted_by_id ? (
+        <p className="repost-label">
+          <Repeat2 size={14} />
+          <Link to={`/community/u/${post.reposted_by_username}`}>{post.reposted_by_id === profile?.id ? 'You' : post.reposted_by_name}</Link> reposted
+        </p>
+      ) : null}
       <header className="post-head">
         <Link to={`/community/u/${post.username}`}><Avatar src={post.avatar_url} name={post.display_name} /></Link>
         <div className="post-who">
@@ -166,6 +200,11 @@ function PostCard({ post, onChange, full, onOpenDog, onFollowed }: {
           <Heart size={22} fill={post.liked ? 'currentColor' : 'none'} />
         </button>
         <Link className="post-act" to={`/community/p/${post.id}#comment`} aria-label="Comment"><MessageCircle size={22} /></Link>
+        {!mine ? (
+          <button className={'post-act' + (post.reposted ? ' reposted' : '')} type="button" onClick={toggleRepost} aria-pressed={post.reposted} aria-label={post.reposted ? 'Undo repost' : 'Repost'} title={post.reposted ? 'Undo repost' : 'Repost'}>
+            <Repeat2 size={23} />
+          </button>
+        ) : null}
         <button className="post-act" type="button" aria-label="Share" onClick={async () => {
           if (canPost) setSharing(true)
           else setToast(await share(`${post.display_name} on PawTrack`, `/community/p/${post.id}`))
@@ -179,7 +218,13 @@ function PostCard({ post, onChange, full, onOpenDog, onFollowed }: {
         ) : null}
       </div>
       <div className="post-body">
-        {post.likes ? <p className="post-likes">{post.likes} {post.likes === 1 ? 'like' : 'likes'}</p> : null}
+        {post.likes || post.reposts ? (
+          <p className="post-likes">
+            {post.likes ? `${post.likes} ${post.likes === 1 ? 'like' : 'likes'}` : ''}
+            {post.likes && post.reposts ? ' · ' : ''}
+            {post.reposts ? `${post.reposts} ${post.reposts === 1 ? 'repost' : 'reposts'}` : ''}
+          </p>
+        ) : null}
         {post.body ? (
           <p className={'post-text' + (!expanded && long ? ' clamp' : '')}>
             <Link className="name-inline" to={`/community/u/${post.username}`}>{post.username}</Link> {post.body}
@@ -240,8 +285,17 @@ export function CommunityPage() {
 
   useEffect(() => { if (!authLoading) load() }, [load, authLoading])
 
+  // The same post can be on the timeline more than once (original + reposts):
+  // keep likes, comments and reposts in step across every copy.
   const update = (id: string) => (next: Post | null) =>
-    setPosts((prev) => (next ? prev.map((p) => (p.id === id ? next : p)) : prev.filter((p) => p.id !== id)))
+    setPosts((prev) => {
+      if (!next) return prev.filter((p) => p.id !== id)
+      const shared = { likes: next.likes, liked: next.liked, comments: next.comments, reposts: next.reposts, reposted: next.reposted, following_author: next.following_author }
+      let list = prev.map((p) => (p.id === id ? { ...p, ...shared } : p))
+      // Undoing my repost removes my "You reposted" copy.
+      if (!next.reposted) list = list.filter((p) => !(p.id === id && p.reposted_by_id === profile?.id))
+      return list
+    })
 
   return (
     <PublicLayout>
@@ -270,7 +324,7 @@ export function CommunityPage() {
 
           {posts.map((p) => (
             <PostCard
-              key={p.id}
+              key={`${p.id}-${p.reposted_by_id || 'post'}`}
               post={p}
               onChange={update(p.id)}
               onOpenDog={setDog}
@@ -286,7 +340,7 @@ export function CommunityPage() {
             </div>
           ) : null}
           {!loading && more ? (
-            <button className="btn btn-light btn-block" type="button" onClick={() => load(posts[posts.length - 1]?.created_at)}>Load more</button>
+            <button className="btn btn-light btn-block" type="button" onClick={() => load(posts[posts.length - 1]?.item_at)}>Load more</button>
           ) : null}
         </div>
       </section>
@@ -591,14 +645,15 @@ function EditProfile({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState(profile?.avatar_url || '')
   const [error, setError] = useState('')
+  // A picked photo waits here until it's cropped to a square.
+  const [cropping, setCropping] = useState<File | null>(null)
 
   function pick(f: File | null) {
     setError('')
     if (!f) return
     const problem = photoProblem(f)
     if (problem) { setError(problem); return }
-    setFile(f)
-    setPreview(URL.createObjectURL(f))
+    setCropping(f)
   }
 
   function review(e: FormEvent) {
@@ -630,7 +685,16 @@ function EditProfile({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
 
   return (
     <>
-    <Modal onClose={onClose}>
+    <Modal onClose={() => { if (cropping) setCropping(null); else onClose() }}>
+      {cropping ? (
+        <div className="dialog">
+          <SquareCropper
+            file={cropping}
+            onCancel={() => setCropping(null)}
+            onDone={(cropped) => { setFile(cropped); setPreview(URL.createObjectURL(cropped)); setCropping(null) }}
+          />
+        </div>
+      ) : (
       <form className="dialog edit-profile" onSubmit={review}>
         <div className="people-head">
           <h2>Edit profile</h2>
@@ -639,7 +703,7 @@ function EditProfile({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
         <label className="avatar-pick">
           <Avatar src={preview} name={name || '?'} size={84} />
           <span><Camera size={15} /> Change photo</span>
-          <input type="file" accept={PHOTO_TYPES.join(',')} onChange={(e) => pick(e.target.files?.[0] || null)} />
+          <input type="file" accept={PHOTO_TYPES.join(',')} onChange={(e) => { pick(e.target.files?.[0] || null); e.target.value = '' }} />
         </label>
         <label htmlFor="ep-name">Name</label>
         <input id="ep-name" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />
@@ -652,6 +716,7 @@ function EditProfile({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
           <button className="btn btn-primary" type="submit">Save</button>
         </div>
       </form>
+      )}
     </Modal>
     {dialog}
     </>

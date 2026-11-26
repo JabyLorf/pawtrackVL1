@@ -839,3 +839,21 @@ a .avatar, a:has(> .avatar) { text-decoration: none; }
 .shared-card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
 .shared-text { padding: 0 10px; font-size: .85rem; color: var(--ink-soft); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .shared-card.gone { padding: 12px; color: var(--muted); font-size: .85rem; font-style: italic; }
+
+/* Reposts */
+.repost-label { display: flex; align-items: center; gap: 6px; padding: 10px 14px 0; margin-bottom: -4px; font-size: .82rem; font-weight: 600; color: var(--muted); }
+.repost-label a { color: var(--ink-soft); text-decoration: none; }
+.repost-label a:hover { text-decoration: underline; }
+.post-act.reposted { color: #16a34a; }
+
+/* Square photo cropper */
+.cropper { display: grid; gap: 10px; justify-items: center; text-align: center; }
+.cropper .auth-sub { margin: 0; }
+.crop-frame { position: relative; overflow: hidden; border-radius: 12px; background: #0b1513; touch-action: none; cursor: grab; display: grid; place-items: center; color: #fff; user-select: none; }
+.crop-frame:active { cursor: grabbing; }
+.crop-frame img { position: absolute; left: 0; top: 0; max-width: none; pointer-events: none; }
+/* Shows where the round profile picture will be. */
+.crop-ring { position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 999px rgba(0, 0, 0, .45); outline: 2px solid rgba(255, 255, 255, .85); outline-offset: -2px; pointer-events: none; }
+.crop-zoom { display: flex; align-items: center; gap: 10px; width: 280px; color: var(--muted); }
+.crop-zoom input { flex: 1; accent-color: var(--brand); padding: 0; }
+.cropper .dialog-actions { width: 100%; }

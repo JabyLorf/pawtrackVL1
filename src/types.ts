@@ -46,6 +46,15 @@ export type Post = {
   liked: boolean
   /** The signed-in person already follows the author. */
   following_author: boolean
+  reposts: number
+  /** The signed-in person reposted it. */
+  reposted: boolean
+  /** When this item appeared on the timeline (the post, or the repost). */
+  item_at: string
+  /** Set when this timeline item is someone's repost. */
+  reposted_by_id: string | null
+  reposted_by_username: string | null
+  reposted_by_name: string | null
 }
 
 export type PostComment = {

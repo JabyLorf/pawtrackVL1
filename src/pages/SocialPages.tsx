@@ -47,7 +47,7 @@ function SignInFirst({ what }: { what: string }) {
 
 type Note = {
   id: string
-  kind: 'like' | 'comment' | 'follow' | 'reply'
+  kind: 'like' | 'comment' | 'follow' | 'reply' | 'repost'
   created_at: string
   is_read: boolean
   actor_id: string
@@ -102,7 +102,7 @@ export function NotificationsPage() {
                   <Link to={`/community/u/${n.username}`}><Avatar src={n.avatar_url} name={n.display_name} size={40} /></Link>
                   <p className="note-text">
                     <Name p={n} />{' '}
-                    {n.kind === 'like' ? 'liked your post.' : n.kind === 'follow' ? 'started following you.' : n.kind === 'reply' ? (
+                    {n.kind === 'like' ? 'liked your post.' : n.kind === 'repost' ? 'reposted your post.' : n.kind === 'follow' ? 'started following you.' : n.kind === 'reply' ? (
                       <>replied to your comment: <span className="note-quote">"{n.comment_text}"</span></>
                     ) : (
                       <>commented: <span className="note-quote">"{n.comment_text}"</span></>
