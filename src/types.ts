@@ -44,12 +44,16 @@ export type Post = {
   likes: number
   comments: number
   liked: boolean
+  /** The signed-in person already follows the author. */
+  following_author: boolean
 }
 
 export type PostComment = {
   id: string
   body: string
   created_at: string
+  /** Set on replies: the top-level comment they belong to. */
+  parent_id: string | null
   author_id: string
   username: string
   display_name: string

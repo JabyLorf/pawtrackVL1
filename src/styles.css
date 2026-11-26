@@ -805,3 +805,37 @@ a .avatar, a:has(> .avatar) { text-decoration: none; }
 .report-preview > div { min-width: 0; display: grid; gap: 4px; }
 .report-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .report-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Follow next to the author's name on a post */
+.who-line { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.who-line .dot { color: var(--muted); }
+.follow-link { background: none; border: 0; padding: 0; font: inherit; font-size: .9rem; font-weight: 700; color: var(--brand); cursor: pointer; }
+.follow-link:hover { color: var(--brand-dark); }
+.follow-link:disabled { color: var(--muted); }
+
+/* Comment threads */
+.thread { display: grid; gap: 10px; }
+.replies { display: grid; gap: 10px; margin-left: 40px; }
+.comment-meta { display: flex; align-items: center; gap: 12px; }
+.comment-reply { font-size: .8rem; font-weight: 700; color: var(--muted); }
+.comment-reply:hover { color: var(--ink); }
+.replying { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--bg); border-radius: 10px; padding: 6px 6px 6px 12px; font-size: .85rem; color: var(--ink-soft); }
+
+/* Share sheet */
+.share-sheet { display: grid; gap: 10px; max-height: 86vh; }
+.share-preview { display: flex; gap: 10px; align-items: center; background: var(--bg); border-radius: 10px; padding: 8px; }
+.share-preview img { width: 52px; height: 52px; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
+.share-preview div { min-width: 0; }
+.share-preview p { color: var(--muted); font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-sheet .person.static > span { flex: 1; min-width: 0; }
+.err-inline { color: var(--danger); }
+
+/* Shared post inside a chat */
+.shared-post { display: grid; gap: 4px; max-width: 260px; }
+.msg.mine .shared-post { justify-items: end; }
+.shared-card { display: grid; gap: 6px; width: 240px; background: #fff; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; text-decoration: none; color: var(--ink); padding-bottom: 8px; }
+.shared-card:hover { border-color: var(--line-strong); }
+.shared-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px 0; font-size: .85rem; }
+.shared-card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+.shared-text { padding: 0 10px; font-size: .85rem; color: var(--ink-soft); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.shared-card.gone { padding: 12px; color: var(--muted); font-size: .85rem; font-style: italic; }

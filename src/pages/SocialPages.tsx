@@ -47,7 +47,7 @@ function SignInFirst({ what }: { what: string }) {
 
 type Note = {
   id: string
-  kind: 'like' | 'comment' | 'follow'
+  kind: 'like' | 'comment' | 'follow' | 'reply'
   created_at: string
   is_read: boolean
   actor_id: string
@@ -102,7 +102,9 @@ export function NotificationsPage() {
                   <Link to={`/community/u/${n.username}`}><Avatar src={n.avatar_url} name={n.display_name} size={40} /></Link>
                   <p className="note-text">
                     <Name p={n} />{' '}
-                    {n.kind === 'like' ? 'liked your post.' : n.kind === 'follow' ? 'started following you.' : (
+                    {n.kind === 'like' ? 'liked your post.' : n.kind === 'follow' ? 'started following you.' : n.kind === 'reply' ? (
+                      <>replied to your comment: <span className="note-quote">"{n.comment_text}"</span></>
+                    ) : (
                       <>commented: <span className="note-quote">"{n.comment_text}"</span></>
                     )}
                     <small> {ago(n.created_at)}</small>
@@ -260,6 +262,10 @@ export function MessagesPage() {
   const preview = (c: Chat) => {
     if (!c.last_body) return c.is_group ? `${c.member_count} members` : 'Say hi!'
     if (c.last_kind === 'system') return c.last_body
+    if (c.last_kind === 'post') {
+      const who = c.last_sender === profile?.display_name ? 'You' : (c.last_sender || '').split(' ')[0]
+      return `${who} shared a post`
+    }
     const who = c.last_sender === profile?.display_name ? 'You' : c.is_group ? (c.last_sender || '').split(' ')[0] : ''
     return who ? `${who}: ${c.last_body}` : c.last_body
   }
@@ -342,12 +348,19 @@ export function MessagesPage() {
 type Msg = {
   id: string
   body: string
-  kind: 'text' | 'system'
+  kind: 'text' | 'system' | 'post'
   created_at: string
   sender_id: string | null
   username: string | null
   display_name: string | null
   avatar_url: string | null
+  // A shared Community post (kind 'post'); empty if the post was deleted.
+  post_id?: string | null
+  post_photo?: string | null
+  post_body?: string | null
+  post_username?: string | null
+  post_display_name?: string | null
+  post_avatar?: string | null
 }
 type Member = Person & { is_admin: boolean }
 type Conv = { id: string; is_group: boolean; title: string }
@@ -519,7 +532,21 @@ export function ChatPage() {
                   <div className="msg-col">
                     {!mine && conv?.is_group && !sameRun ? <small className="msg-name">{m.display_name || who?.display_name || 'Former member'}</small> : null}
                     <div className="bubble-row">
-                      <p className="bubble" title={time(m.created_at)}>{m.body}</p>
+                      {m.kind === 'post' ? (
+                        <div className="shared-post" title={time(m.created_at)}>
+                          {m.post_id ? (
+                            <Link to={`/community/p/${m.post_id}`} className="shared-card">
+                              <span className="shared-head">
+                                <Avatar src={m.post_avatar || ''} name={m.post_display_name || '?'} size={22} />
+                                <b>{m.post_display_name}</b>
+                              </span>
+                              {m.post_photo ? <img src={m.post_photo} alt="" /> : null}
+                              {m.post_body ? <span className="shared-text">{m.post_body}</span> : null}
+                            </Link>
+                          ) : <span className="shared-card gone">This post is no longer available.</span>}
+                          {m.body && m.body !== 'Shared a post' ? <p className="bubble">{m.body}</p> : null}
+                        </div>
+                      ) : <p className="bubble" title={time(m.created_at)}>{m.body}</p>}
                       {!mine ? (
                         <button className="msg-flag" type="button" aria-label="Report message" title="Report" onClick={() => setReport(m.id)}><Flag size={13} /></button>
                       ) : null}

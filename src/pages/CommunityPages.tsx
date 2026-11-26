@@ -33,6 +33,7 @@ import { Modal } from '../components/Modal'
 import { Avatar } from '../components/Avatar'
 import { friendly, Name, share, Toast, useJoin } from '../components/CommunityUi'
 import { ReportDialog, type ReportKind } from '../components/ReportDialog'
+import { ShareSheet } from '../components/ShareSheet'
 import { DogPeek } from '../components/DogPeek'
 import { useConfirm } from '../components/ConfirmDialog'
 import { useLeaveGuard } from '../components/useLeaveGuard'
@@ -70,9 +71,11 @@ async function removeOwnPhoto(url: string) {
 
 // ---- post card --------------------------------------------------------------
 
-function PostCard({ post, onChange, full, onOpenDog }: {
+function PostCard({ post, onChange, full, onOpenDog, onFollowed }: {
   post: Post
   onChange: (next: Post | null) => void
+  /** Called after following the author, so other posts by them update too. */
+  onFollowed?: (authorId: string) => void
   /** On the post's own page: no "view comments" link, caption not shortened. */
   full?: boolean
   onOpenDog?: (dogId: string) => void
@@ -84,7 +87,20 @@ function PostCard({ post, onChange, full, onOpenDog }: {
   const [toast, setToast] = useState('')
   const [expanded, setExpanded] = useState(!!full)
   const [reporting, setReporting] = useState(false)
+  const [sharing, setSharing] = useState(false)
+  const [following, setFollowing] = useState(false)
   const liking = useRef(false)
+
+  async function followAuthor() {
+    if (!canPost) { join(); return }
+    if (following) return
+    setFollowing(true)
+    const { error } = await supabase.from('follows').insert({ following_id: post.author_id })
+    setFollowing(false)
+    if (error && !/duplicate/i.test(error.message)) { setToast(friendly(error.message)); return }
+    if (onFollowed) onFollowed(post.author_id)
+    else onChange({ ...post, following_author: true })
+  }
 
   async function toggleLike() {
     if (!canPost) { join(); return }
@@ -108,7 +124,15 @@ function PostCard({ post, onChange, full, onOpenDog }: {
       <header className="post-head">
         <Link to={`/community/u/${post.username}`}><Avatar src={post.avatar_url} name={post.display_name} /></Link>
         <div className="post-who">
-          <Name p={post} />
+          <span className="who-line">
+            <Name p={post} />
+            {!mine && !post.following_author ? (
+              <>
+                <span className="dot" aria-hidden="true">·</span>
+                <button className="follow-link" type="button" onClick={followAuthor} disabled={following}>{following ? 'Following…' : 'Follow'}</button>
+              </>
+            ) : null}
+          </span>
           <small><Link to={`/community/p/${post.id}`}>{ago(post.created_at)}</Link></small>
         </div>
         {canPost && !mine ? (
@@ -142,7 +166,10 @@ function PostCard({ post, onChange, full, onOpenDog }: {
           <Heart size={22} fill={post.liked ? 'currentColor' : 'none'} />
         </button>
         <Link className="post-act" to={`/community/p/${post.id}#comment`} aria-label="Comment"><MessageCircle size={22} /></Link>
-        <button className="post-act" type="button" aria-label="Share" onClick={async () => setToast(await share(`${post.display_name} on PawTrack`, `/community/p/${post.id}`))}>
+        <button className="post-act" type="button" aria-label="Share" onClick={async () => {
+          if (canPost) setSharing(true)
+          else setToast(await share(`${post.display_name} on PawTrack`, `/community/p/${post.id}`))
+        }}>
           <Share2 size={21} />
         </button>
         {post.dog_id && post.dog_name ? (
@@ -167,6 +194,7 @@ function PostCard({ post, onChange, full, onOpenDog }: {
       </div>
       {dialog}
       {reporting ? <ReportDialog kind="post" id={post.id} onClose={() => setReporting(false)} /> : null}
+      {sharing ? <ShareSheet post={post} onClose={() => setSharing(false)} onToast={setToast} /> : null}
       <Toast text={toast} onDone={() => setToast('')} />
     </article>
   )
@@ -240,7 +268,15 @@ export function CommunityPage() {
             <JoinCard text="Share photos of your rescue, follow the shelter and other dog lovers, and cheer on dogs looking for a home." />
           )}
 
-          {posts.map((p) => <PostCard key={p.id} post={p} onChange={update(p.id)} onOpenDog={setDog} />)}
+          {posts.map((p) => (
+            <PostCard
+              key={p.id}
+              post={p}
+              onChange={update(p.id)}
+              onOpenDog={setDog}
+              onFollowed={(author) => setPosts((list) => list.map((x) => (x.author_id === author ? { ...x, following_author: true } : x)))}
+            />
+          ))}
 
           {loading ? <p className="empty"><Loader2 size={18} className="spin" /> Loading posts…</p> : null}
           {!loading && posts.length === 0 ? (
@@ -274,7 +310,16 @@ export function PostPage() {
   const [error, setError] = useState('')
   const [dog, setDog] = useState<string | null>(null)
   const [report, setReport] = useState<{ kind: ReportKind; id: string } | null>(null)
+  const [replyTo, setReplyTo] = useState<{ id: string; username: string; name: string } | null>(null)
   const box = useRef<HTMLTextAreaElement>(null)
+
+  function startReply(c: PostComment) {
+    if (!canPost) { join(); return }
+    // Replies to a reply join the same thread, like Instagram.
+    setReplyTo({ id: c.parent_id || c.id, username: c.username, name: c.display_name })
+    setText((t) => (t.startsWith(`@${c.username} `) ? t : `@${c.username} `))
+    setTimeout(() => box.current?.focus(), 0)
+  }
 
   const loadComments = useCallback(async () => {
     const { data } = await supabase.rpc('community_comments', { p_post: id })
@@ -301,10 +346,11 @@ export function PostPage() {
     if (!body || sending) return
     setSending(true)
     setError('')
-    const { error: err } = await supabase.from('post_comments').insert({ post_id: id, body })
+    const { error: err } = await supabase.from('post_comments').insert({ post_id: id, body, parent_id: replyTo?.id || null })
     setSending(false)
     if (err) { setError(friendly(err.message)); return }
     setText('')
+    setReplyTo(null)
     await loadComments()
     setPost((p) => (p ? { ...p, comments: p.comments + 1 } : p))
   }
@@ -324,36 +370,58 @@ export function PostPage() {
               <div className="comments panel">
                 <h3>Comments</h3>
                 {comments.length === 0 ? <p className="muted">No comments yet.</p> : null}
-                {comments.map((c) => {
-                  const canDelete = profile?.id === c.author_id || profile?.id === post.author_id || isStaff
-                  return (
-                    <div className="comment" key={c.id}>
-                      <Link to={`/community/u/${c.username}`}><Avatar src={c.avatar_url} name={c.display_name} size={30} /></Link>
-                      <div className="comment-main">
-                        <p><Name p={c} /> <span className="comment-text">{c.body}</span></p>
-                        <small className="muted">{ago(c.created_at)}</small>
+                {comments.filter((c) => !c.parent_id).map((c) => {
+                  const replies = comments.filter((r) => r.parent_id === c.id)
+                  const row = (x: PostComment, reply: boolean) => {
+                    const canDelete = profile?.id === x.author_id || profile?.id === post.author_id || isStaff
+                    return (
+                      <div className={'comment' + (reply ? ' reply' : '')} key={x.id}>
+                        <Link to={`/community/u/${x.username}`}><Avatar src={x.avatar_url} name={x.display_name} size={reply ? 26 : 30} /></Link>
+                        <div className="comment-main">
+                          <p><Name p={x} /> <span className="comment-text">{x.body}</span></p>
+                          <div className="comment-meta">
+                            <small className="muted">{ago(x.created_at)}</small>
+                            <button className="link comment-reply" type="button" onClick={() => startReply(x)}>Reply</button>
+                          </div>
+                        </div>
+                        {canPost && profile?.id !== x.author_id ? (
+                          <button className="icon-btn sm" type="button" aria-label="Report comment" title="Report" onClick={() => setReport({ kind: 'comment', id: x.id })}><Flag size={14} /></button>
+                        ) : null}
+                        {canDelete ? (
+                          <button className="icon-btn sm" type="button" aria-label="Delete comment" onClick={() => confirm({
+                            title: reply ? 'Delete this reply?' : 'Delete this comment?',
+                            body: !reply && replies.length
+                              ? `The comment and its ${replies.length === 1 ? 'reply' : `${replies.length} replies`} will be removed for good.`
+                              : 'It will be removed for good.',
+                            confirmLabel: 'Delete',
+                            danger: true,
+                            action: async () => {
+                              const { error: err } = await supabase.from('post_comments').delete().eq('id', x.id)
+                              if (err) return friendly(err.message)
+                              const gone = reply ? 1 : 1 + replies.length
+                              setComments((list) => list.filter((y) => y.id !== x.id && y.parent_id !== x.id))
+                              setPost((p) => (p ? { ...p, comments: Math.max(0, p.comments - gone) } : p))
+                              if (replyTo?.id === x.id) setReplyTo(null)
+                              return null
+                            },
+                          })}><Trash2 size={15} /></button>
+                        ) : null}
                       </div>
-                      {canPost && profile?.id !== c.author_id ? (
-                        <button className="icon-btn sm" type="button" aria-label="Report comment" title="Report" onClick={() => setReport({ kind: 'comment', id: c.id })}><Flag size={14} /></button>
-                      ) : null}
-                      {canDelete ? (
-                        <button className="icon-btn sm" type="button" aria-label="Delete comment" onClick={() => confirm({
-                          title: 'Delete this comment?',
-                          body: 'The comment will be removed for good.',
-                          confirmLabel: 'Delete comment',
-                          danger: true,
-                          action: async () => {
-                            const { error: err } = await supabase.from('post_comments').delete().eq('id', c.id)
-                            if (err) return friendly(err.message)
-                            setComments((list) => list.filter((x) => x.id !== c.id))
-                            setPost((p) => (p ? { ...p, comments: Math.max(0, p.comments - 1) } : p))
-                            return null
-                          },
-                        })}><Trash2 size={15} /></button>
-                      ) : null}
+                    )
+                  }
+                  return (
+                    <div className="thread" key={c.id}>
+                      {row(c, false)}
+                      {replies.length ? <div className="replies">{replies.map((r) => row(r, true))}</div> : null}
                     </div>
                   )
                 })}
+                {canPost && replyTo ? (
+                  <div className="replying">
+                    Replying to <b>{replyTo.name}</b>
+                    <button className="icon-btn sm" type="button" aria-label="Cancel reply" onClick={() => { setReplyTo(null); setText('') }}><X size={14} /></button>
+                  </div>
+                ) : null}
                 {canPost ? (
                   <form className="comment-form" onSubmit={send}>
                     <Avatar src={profile!.avatar_url} name={profile!.display_name} size={30} />
@@ -361,7 +429,7 @@ export function PostPage() {
                       ref={box}
                       rows={1}
                       maxLength={500}
-                      placeholder="Add a comment…"
+                      placeholder={replyTo ? `Reply to ${replyTo.name}…` : 'Add a comment…'}
                       value={text}
                       onChange={(e) => setText(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); (e.currentTarget.form as HTMLFormElement).requestSubmit() } }}
