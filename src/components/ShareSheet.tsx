@@ -105,7 +105,7 @@ export function ShareSheet({ post, onClose, onToast }: { post: Post; onClose: ()
           {list.map((t) => {
             const state = sent[t.key]
             return (
-              <div key={t.key} className="person static">
+              <div key={t.key} className="who-row static">
                 {t.group ? <span className="avatar group-avatar" style={{ width: 38, height: 38 }}><Users size={17} /></span> : <Avatar src={t.avatar} name={t.label} size={38} />}
                 <span>
                   {t.person ? <Name p={t.person} link={false} /> : <b>{t.label}</b>}

@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { Bell, Clock, HandHeart, MessageCircle, Users, Home, Info, LayoutDashboard, LogIn, LogOut, Mail, MapPin, Menu, PawPrint, Phone, X } from 'lucide-react'
+import { Bell, Clock, HandHeart, MessageCircle, Newspaper, Users, Home, Info, LayoutDashboard, LogIn, LogOut, Mail, MapPin, Menu, PawPrint, Phone, X } from 'lucide-react'
 import { showAppLinks } from '../lib/app'
 import { GetAppButtons } from './IosInstall'
 import { useSignOut } from './useSignOut'
@@ -40,13 +40,10 @@ export function PublicLayout({ children }: { children: ReactNode }) {
     ['/contact', 'Contact', <Mail size={18} />],
   ]
 
+  // Members reach their profile from the picture in the icon bar.
   const account = isStaff ? (
     <NavLink className="btn btn-primary btn-sm" to="/ops"><LayoutDashboard size={16} /> Staff desk</NavLink>
-  ) : profile && profile.status === 'active' ? (
-    <NavLink className="btn btn-light btn-sm me-btn" to={`/community/u/${profile.username}`}>
-      <Avatar src={profile.avatar_url} name={profile.display_name} size={22} /> {profile.display_name.split(' ')[0]}
-    </NavLink>
-  ) : profile ? (
+  ) : profile && profile.status === 'active' ? null : profile ? (
     <button className="btn btn-light btn-sm" type="button" onClick={askSignOut}><LogOut size={16} /> Sign out</button>
   ) : (
     <NavLink className="btn btn-primary btn-sm" to="/staff-login"><LogIn size={16} /> Staff sign in</NavLink>
@@ -55,11 +52,17 @@ export function PublicLayout({ children }: { children: ReactNode }) {
   const badge = (n: number) => (n ? <span className="hdr-badge">{n > 99 ? '99+' : n}</span> : null)
   const alerts = profile && profile.status === 'active' ? (
     <>
+      <NavLink className={({ isActive }) => 'nav-icon feed-icon' + (isActive ? ' on' : '')} to="/community" end aria-label="Community feed" title="Feed">
+        <Newspaper size={20} />
+      </NavLink>
       <NavLink className={({ isActive }) => 'nav-icon' + (isActive ? ' on' : '')} to="/community/notifications" aria-label={`Notifications${unread.notifications ? `, ${unread.notifications} new` : ''}`}>
         <Bell size={20} />{badge(unread.notifications)}
       </NavLink>
       <NavLink className={({ isActive }) => 'nav-icon' + (isActive ? ' on' : '')} to="/messages" aria-label={`Messages${unread.chats ? `, ${unread.chats} unread` : ''}`}>
         <MessageCircle size={20} />{badge(unread.chats)}
+      </NavLink>
+      <NavLink className={({ isActive }) => 'nav-icon nav-me' + (isActive ? ' on' : '')} to={`/community/u/${profile.username}`} aria-label="My profile" title="My profile">
+        <Avatar src={profile.avatar_url} name={profile.display_name} size={28} />
       </NavLink>
     </>
   ) : null

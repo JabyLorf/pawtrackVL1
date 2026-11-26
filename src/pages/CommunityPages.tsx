@@ -627,7 +627,7 @@ function PeopleList({ user, kind, onClose }: { user: CommunityProfile; kind: 'fo
         {!people ? <p className="muted">Loading…</p> : people.length === 0 ? (
           <p className="muted">{kind === 'followers' ? 'No followers yet.' : 'Not following anyone yet.'}</p>
         ) : people.map((p) => (
-          <Link key={p.id} className="person" to={`/community/u/${p.username}`} onClick={onClose}>
+          <Link key={p.id} className="who-row" to={`/community/u/${p.username}`} onClick={onClose}>
             <Avatar src={p.avatar_url} name={p.display_name} size={38} />
             <span><Name p={p} link={false} /><small>@{p.username}</small></span>
           </Link>

@@ -200,7 +200,7 @@ function PeoplePicker({ title, multi, exclude = [], groupName, busyLabel, onPick
           {results.map((p) => {
             const on = picked.some((x) => x.id === p.id)
             return (
-              <button key={p.id} type="button" className={'person' + (on ? ' on' : '')} onClick={() => toggle(p)} disabled={busy}>
+              <button key={p.id} type="button" className={'who-row' + (on ? ' on' : '')} onClick={() => toggle(p)} disabled={busy}>
                 <Avatar src={p.avatar_url} name={p.display_name} size={38} />
                 <span><Name p={p} link={false} /><small>@{p.username}</small></span>
                 {multi ? <span className={'tick' + (on ? ' on' : '')}>{on ? <Check size={14} /> : null}</span> : null}
@@ -518,19 +518,19 @@ export function ChatPage() {
             {missing ? <p className="empty center-text">This chat doesn't exist or you're no longer in it.</p> : null}
             {older ? <button className="link center-link" type="button" onClick={loadOlder}>Load earlier messages</button> : null}
             {msgs.map((m, i) => {
-              if (m.kind === 'system') return <p key={m.id} className="msg-system">{m.body}</p>
+              if (m.kind === 'system') return <p key={m.id} className="cmsg-system">{m.body}</p>
               const mine = m.sender_id === me
               const prev = msgs[i - 1]
               const sameRun = prev && prev.kind === 'text' && prev.sender_id === m.sender_id &&
                 new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() < 5 * 60000
               const who = (m.sender_id && byId.get(m.sender_id)) || null
               return (
-                <div key={m.id} className={'msg' + (mine ? ' mine' : '') + (sameRun ? ' run' : '')}>
+                <div key={m.id} className={'cmsg' + (mine ? ' mine' : '') + (sameRun ? ' run' : '')}>
                   {!mine ? (
-                    <span className="msg-avatar">{!sameRun ? <Avatar src={m.avatar_url || who?.avatar_url || ''} name={m.display_name || who?.display_name || '?'} size={28} /> : null}</span>
+                    <span className="cmsg-avatar">{!sameRun ? <Avatar src={m.avatar_url || who?.avatar_url || ''} name={m.display_name || who?.display_name || '?'} size={28} /> : null}</span>
                   ) : null}
-                  <div className="msg-col">
-                    {!mine && conv?.is_group && !sameRun ? <small className="msg-name">{m.display_name || who?.display_name || 'Former member'}</small> : null}
+                  <div className="cmsg-col">
+                    {!mine && conv?.is_group && !sameRun ? <small className="cmsg-name">{m.display_name || who?.display_name || 'Former member'}</small> : null}
                     <div className="bubble-row">
                       {m.kind === 'post' ? (
                         <div className="shared-post" title={time(m.created_at)}>
@@ -548,10 +548,10 @@ export function ChatPage() {
                         </div>
                       ) : <p className="bubble" title={time(m.created_at)}>{m.body}</p>}
                       {!mine ? (
-                        <button className="msg-flag" type="button" aria-label="Report message" title="Report" onClick={() => setReport(m.id)}><Flag size={13} /></button>
+                        <button className="cmsg-flag" type="button" aria-label="Report message" title="Report" onClick={() => setReport(m.id)}><Flag size={13} /></button>
                       ) : null}
                     </div>
-                    {!msgs[i + 1] || msgs[i + 1].sender_id !== m.sender_id ? <small className="msg-time">{time(m.created_at)}</small> : null}
+                    {!msgs[i + 1] || msgs[i + 1].sender_id !== m.sender_id ? <small className="cmsg-time">{time(m.created_at)}</small> : null}
                   </div>
                 </div>
               )
@@ -591,7 +591,7 @@ export function ChatPage() {
             </div>
             <p className="muted small">{members.length} members</p>
             {members.map((m) => (
-              <div key={m.id} className="person static">
+              <div key={m.id} className="who-row static">
                 <Link to={`/community/u/${m.username}`} onClick={() => setInfo(false)}><Avatar src={m.avatar_url} name={m.display_name} size={38} /></Link>
                 <span><Name p={m} /><small>@{m.username}{m.is_admin ? ' · Group admin' : ''}{m.id === me ? ' · You' : ''}</small></span>
                 {amAdmin && m.id !== me ? (
