@@ -8,7 +8,8 @@ import { useSignOut } from './useSignOut'
 import { Avatar } from './Avatar'
 import { useUnread } from './useUnread'
 
-export function PublicLayout({ children }: { children: ReactNode }) {
+/** noFooter: app-like pages (Community feed, messages…) skip the site footer. */
+export function PublicLayout({ children, noFooter }: { children: ReactNode; noFooter?: boolean }) {
   const { profile, isStaff } = useAuth()
   const { askSignOut, signOutDialog } = useSignOut()
   const unread = useUnread()
@@ -119,11 +120,14 @@ export function PublicLayout({ children }: { children: ReactNode }) {
         </nav>
         <div className="drawer-foot">
           {account}
+          {profile && profile.status === 'active' ? (
+            <button className="btn btn-light btn-sm" type="button" onClick={() => { setOpen(false); askSignOut() }}><LogOut size={16} /> Sign out</button>
+          ) : null}
           {showAppLinks ? <GetAppButtons className="btn btn-light btn-sm" both /> : null}
         </div>
       </aside>
       {children}
-      <footer className="site-footer">
+      {noFooter ? null : <footer className="site-footer">
         <div className="container">
           <div>
             <h4>About OSO</h4>
@@ -147,7 +151,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           </div>
           <div className="foot-bottom">© {new Date().getFullYear()} Ormoc Strays Oasis, Incorporated</div>
         </div>
-      </footer>
+      </footer>}
       {signOutDialog}
     </div>
   )

@@ -64,6 +64,7 @@ type Note = {
 
 export function NotificationsPage() {
   const { canPost, loading } = useAuth()
+  const navigate = useNavigate()
   const [notes, setNotes] = useState<Note[] | null>(null)
 
   useEffect(() => {
@@ -84,7 +85,7 @@ export function NotificationsPage() {
   }
 
   return (
-    <PublicLayout>
+    <PublicLayout noFooter>
       <section className="block community">
         <div className="feed-wrap">
           <div className="feed-top"><div><p className="kicker">Community</p><h2>Notifications</h2></div></div>
@@ -98,7 +99,20 @@ export function NotificationsPage() {
           ) : (
             <div className="panel note-list">
               {notes.map((n) => (
-                <div key={n.id} className={'note' + (n.is_read ? '' : ' unread')}>
+                <div
+                  key={n.id}
+                  className={'note clickable' + (n.is_read ? '' : ' unread')}
+                  role="link"
+                  tabIndex={0}
+                  // Tapping anywhere opens the post (or the person, for a follow).
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest('a, button')) return
+                    navigate(n.kind === 'follow' || !n.post_id ? `/community/u/${n.username}` : `/community/p/${n.post_id}`)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') navigate(n.kind === 'follow' || !n.post_id ? `/community/u/${n.username}` : `/community/p/${n.post_id}`)
+                  }}
+                >
                   <Link to={`/community/u/${n.username}`}><Avatar src={n.avatar_url} name={n.display_name} size={40} /></Link>
                   <p className="note-text">
                     <Name p={n} />{' '}
@@ -271,15 +285,15 @@ export function MessagesPage() {
   }
 
   return (
-    <PublicLayout>
+    <PublicLayout noFooter>
       <section className="block community">
         <div className="feed-wrap">
           <div className="feed-top">
             <div><p className="kicker">Community</p><h2>Messages</h2></div>
             {canPost ? (
-              <div className="row-gap">
-                <button className="btn btn-light" type="button" onClick={() => setPicker('group')}><Users size={16} /> New group</button>
-                <button className="btn btn-primary" type="button" onClick={() => setPicker('dm')}><MessageSquarePlus size={16} /> New message</button>
+              <div className="row-gap feed-actions">
+                <button className="btn btn-light btn-sm" type="button" onClick={() => setPicker('group')}><Users size={16} /> New group</button>
+                <button className="btn btn-primary btn-sm" type="button" onClick={() => setPicker('dm')}><MessageSquarePlus size={16} /> New message</button>
               </div>
             ) : null}
           </div>
@@ -491,11 +505,11 @@ export function ChatPage() {
   const title = conv?.is_group ? conv.title : others[0]?.display_name || 'Chat'
 
   if (!loading && !canPost) {
-    return <PublicLayout><section className="block community"><div className="feed-wrap"><SignInFirst what="messages" /></div></section></PublicLayout>
+    return <PublicLayout noFooter><section className="block community"><div className="feed-wrap"><SignInFirst what="messages" /></div></section></PublicLayout>
   }
 
   return (
-    <PublicLayout>
+    <PublicLayout noFooter>
       <section className="chat-page">
         <div className="chat-shell">
           <header className="chat-head">

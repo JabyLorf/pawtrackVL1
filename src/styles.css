@@ -871,3 +871,33 @@ a .avatar, a:has(> .avatar) { text-decoration: none; }
 @media (max-width: 440px) {
   .site-nav .container:has(.nav-alerts.phone-only) .oso-brand small { display: none; }
 }
+
+/* Donate: money or food & supplies */
+.gift-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 18px; }
+.gift-tabs button { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 10px; border: 1.5px solid var(--line); border-radius: 12px; background: #fff; font: inherit; font-weight: 700; color: var(--ink-soft); cursor: pointer; }
+.gift-tabs button.on { border-color: var(--brand); background: var(--brand-light); color: var(--brand-dark); }
+.goods-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.goods-chip { border: 1.5px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: .86rem; font-weight: 600; color: var(--ink-soft); cursor: pointer; }
+.goods-chip.on { border-color: var(--brand); background: var(--brand-light); color: var(--brand-dark); }
+
+/* Notifications: the whole row opens the post */
+.note.clickable { cursor: pointer; }
+.note.clickable:hover { background: var(--bg); }
+.note.clickable.unread:hover { background: #d9ede9; }
+
+/* Messages header: buttons never push the page wider than the screen */
+.feed-top { flex-wrap: wrap; }
+.feed-actions .btn { white-space: nowrap; }
+@media (max-width: 600px) {
+  .feed-top { align-items: center; }
+  .feed-top h2 { font-size: 1.35rem; }
+}
+.hide-phone { }
+@media (max-width: 767px) { .hide-phone { display: none !important; } }
+
+/* Staff page titles with a Download button */
+.page-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.page-head-row .page-h1 { margin-bottom: 0; }
+.page-head-row + .page-sub { margin-top: 6px; }
+.download-wrap { display: inline-grid; justify-items: end; gap: 4px; max-width: 100%; }
+.download-wrap small { font-size: .78rem; text-align: right; }

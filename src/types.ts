@@ -167,6 +167,11 @@ export type Donation = {
   anonymous: boolean
   decided_at: string | null
   created_at: string
+  /** Food & supplies donations (method 'In-kind Donation'). */
+  items?: string
+  delivery?: '' | 'Drop off' | 'Pick up'
+  phone?: string
+  preferred_date?: string | null
 }
 
 export type InboxMessage = {

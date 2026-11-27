@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { downloadCsv, isoDay } from '../lib/csv'
 import { ago, calendarDaysSince, dogMatches, localDate, inCare, isListed, peso, statusClass } from '../lib/utils'
 import type { Activity, Adoption, Dog, DogStatus, Donation, InboxMessage, Profile } from '../types'
 import { ADD_STATUSES, AGES, INTAKE_REASONS, SEXES, SIZES, type Intake, type IntakeReason } from '../types'
@@ -11,7 +12,7 @@ import { useAuth } from '../context/AuthContext'
 import { Modal } from '../components/Modal'
 import { ConfirmDialog, useConfirm } from '../components/ConfirmDialog'
 import { useLeaveGuard } from '../components/useLeaveGuard'
-import { ClipboardList, HandCoins, HeartHandshake, Inbox, PawPrint, Stethoscope, Syringe, Tag, UserCheck, UserX, X, Reply, Users, Check, Loader2, Send, Trash2, RotateCcw, Plus, CheckCircle2, Image as ImageIcon, Pencil } from 'lucide-react'
+import { ClipboardList, Download, HandCoins, Package, HeartHandshake, Inbox, PawPrint, Stethoscope, Syringe, Tag, UserCheck, UserX, X, Reply, Users, Check, Loader2, Send, Trash2, RotateCcw, Plus, CheckCircle2, Image as ImageIcon, Pencil } from 'lucide-react'
 
 function Kpi({ icon, n, l, tone }: { icon: ReactNode; n: ReactNode; l: string; tone?: 'warn' | 'muted' }) {
   return (
@@ -44,7 +45,7 @@ export function DashboardPage() {
   const adopted = dogs.filter((d) => d.status === 'Adopted').length
   const deceased = dogs.filter((d) => d.status === 'Deceased').length
   const pendingApps = adoptions.filter((a) => a.status === 'pending').length
-  const donated = donations.filter((d) => d.status === 'confirmed').reduce((s, d) => s + Number(d.amount), 0)
+  const donated = donations.filter((d) => d.status === 'confirmed' && d.method !== 'In-kind Donation').reduce((s, d) => s + Number(d.amount), 0)
   const counts: Record<string, number> = {}
   dogs.forEach((d) => { counts[d.status] = (counts[d.status] || 0) + 1 })
   const max = Math.max(1, ...Object.values(counts))
@@ -280,6 +281,37 @@ export function DogsPage() {
   )
 }
 
+/** "Download" button for a staff record list (CSV for Excel / Google Sheets). */
+function DownloadButton({ build, name }: {
+  name: string
+  build: () => Promise<{ headers: string[]; rows: (string | number | boolean | null | undefined)[][] }>
+}) {
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+  async function go() {
+    setBusy(true)
+    setNote('')
+    try {
+      const { headers, rows } = await build()
+      if (!rows.length) { setNote('Nothing to download yet.'); return }
+      const msg = await downloadCsv(name, headers, rows)
+      if (msg) setNote(msg)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <span className="download-wrap">
+      <button className="btn btn-light btn-sm" type="button" onClick={go} disabled={busy}>
+        {busy ? <Loader2 size={15} className="spin" /> : <Download size={15} />} Download
+      </button>
+      {note ? <small className="muted">{note}</small> : null}
+    </span>
+  )
+}
+
+const yes = (b: boolean | undefined) => (b ? 'Yes' : 'No')
+
 export function IntakePage() {
   const { confirm, dialog } = useConfirm()
   const navigate = useNavigate()
@@ -347,7 +379,21 @@ export function IntakePage() {
 
   return (
     <div>
-      <h1 className="page-h1">Intake</h1>
+      <div className="page-head-row">
+        <h1 className="page-h1">Intake</h1>
+        <DownloadButton name="pawtrack-intake" build={async () => {
+          const { data } = await supabase.from('intakes').select('*').order('intake_at', { ascending: false })
+          const list = (data as Intake[]) || []
+          return {
+            headers: ['Name', 'Sex', 'Age', 'Breed', 'Color', 'Size', 'Reason', 'Date of intake', 'Days in intake', 'Where found', 'Rescued / brought in by',
+              'Condition & treatment notes', 'Temperament', '5-in-1 vaccine', 'Anti-rabies', 'Dewormed', 'Spayed / neutered', 'Status', 'Left intake on'],
+            rows: list.map((r) => [r.name, r.sex, r.age, r.breed, r.color, r.size, r.reason, isoDay(r.intake_at),
+              r.moved_at ? '' : calendarDaysSince(r.intake_at), r.found_at, r.rescued_by, r.notes, r.temperament,
+              yes(r.vax_5in1), yes(r.anti_rabies), yes(r.dewormed), yes(r.spayed),
+              !r.moved_at ? 'In intake' : r.moved_to === 'Deceased' ? 'Died' : 'Moved to adoption', isoDay(r.moved_at)]),
+          }
+        }} />
+      </div>
       <p className="page-sub">
         Dogs that just arrived and can't be adopted yet. Staff only: they are not on the website until they're marked ready for adoption.
       </p>
@@ -434,7 +480,24 @@ export function AdoptedPage() {
   }
   return (
     <div>
-      <h1 className="page-h1">Adopted</h1>
+      <div className="page-head-row">
+        <h1 className="page-h1">Adopted</h1>
+        <DownloadButton name="pawtrack-adopted" build={async () => {
+          const [{ data: d }, { data: a }] = await Promise.all([
+            supabase.from('dogs').select('*').eq('status', 'Adopted').order('name'),
+            supabase.from('adoptions').select('*').eq('status', 'approved'),
+          ])
+          const adopters = new Map(((a as (Adoption & { decided_at: string | null })[]) || []).map((x) => [x.dog_id, x]))
+          return {
+            headers: ['OSO ID', 'Name', 'Sex', 'Age', 'Breed', 'Color', 'Size', 'Date of intake', 'Adopted on', 'Adopted by', 'Phone', 'Email', 'Address', 'Home', 'Other pets'],
+            rows: ((d as Dog[]) || []).map((x) => {
+              const ad = adopters.get(x.id)
+              return [x.oso_id, x.name, x.sex, x.age, x.breed, x.color, x.size, isoDay(x.intake_at), isoDay(ad?.decided_at),
+                ad?.applicant, ad?.phone, ad?.email, ad?.address, ad?.home, ad?.pets]
+            }),
+          }
+        }} />
+      </div>
       <p className="page-sub">Dogs that have been adopted.</p>
       <DogTable list={dogs} onChanged={load} extra={(d) => <button className="btn btn-ghost" type="button" onClick={() => confirm({
         title: `Make ${d.name} available again?`,
@@ -461,7 +524,18 @@ export function MortalityPage() {
   }
   return (
     <div>
-      <h1 className="page-h1">Mortality</h1>
+      <div className="page-head-row">
+        <h1 className="page-h1">Mortality</h1>
+        <DownloadButton name="pawtrack-mortality" build={async () => {
+          const { data } = await supabase.from('dogs').select('*').eq('status', 'Deceased').order('died_at', { ascending: false })
+          return {
+            headers: ['OSO ID', 'Name', 'Sex', 'Age', 'Breed', 'Color', 'Size', 'Date of intake', 'Date of death', 'Days in care', '5-in-1 vaccine', 'Anti-rabies', 'Dewormed', 'Spayed / neutered'],
+            rows: ((data as Dog[]) || []).map((x) => [x.oso_id, x.name, x.sex, x.age, x.breed, x.color, x.size, isoDay(x.intake_at), isoDay(x.died_at),
+              x.died_at ? Math.max(0, Math.round((new Date(x.died_at).getTime() - new Date(x.intake_at).getTime()) / 86400000)) : '',
+              yes(x.vax_5in1), yes(x.anti_rabies), yes(x.dewormed), yes(x.spayed)]),
+          }
+        }} />
+      </div>
       <p className="page-sub">Deceased dogs are kept here and are not listed for adoption.</p>
       <DogTable list={dogs} onChanged={load} extra={(d) => <button className="btn btn-ghost" type="button" onClick={() => confirm({
         title: `Make ${d.name} available again?`,
@@ -1026,7 +1100,18 @@ export function AdoptionsPage() {
 
   return (
     <div>
-      <h1 className="page-h1">Adoptions</h1>
+      <div className="page-head-row">
+        <h1 className="page-h1">Adoptions</h1>
+        <DownloadButton name="pawtrack-adoption-applications" build={async () => {
+          const { data } = await supabase.from('adoptions').select('*, dogs(name, oso_id)').order('created_at', { ascending: false })
+          const list = (data as (Adoption & { decided_at: string | null; dogs?: { name: string; oso_id: string } | null })[]) || []
+          return {
+            headers: ['Applied on', 'Dog', 'OSO ID', 'Applicant', 'Phone', 'Email', 'Address', 'Home', 'Other pets', 'Who wants to adopt / note', 'Status', 'Decided on'],
+            rows: list.map((x) => [isoDay(x.created_at), x.dogs?.name, x.dogs?.oso_id, x.applicant, x.phone, x.email, x.address, x.home, x.pets, x.note,
+              x.status === 'approved' ? 'Approved' : x.status === 'rejected' ? 'Rejected' : 'Pending', isoDay(x.decided_at)]),
+          }
+        }} />
+      </div>
       <h3 className="table-h">Pending</h3>
       {table(pending, true, 'No pending applications.')}
       <h3 className="table-h">Approved</h3>
@@ -1120,6 +1205,15 @@ function EditDonation({ d, onClose, onSave }: { d: Donation; onClose: () => void
   )
 }
 
+const isGoods = (d: Donation) => d.method === 'In-kind Donation'
+const shortGift = (d: Donation) => (isGoods(d) ? 'food & supplies' : peso(Number(d.amount)))
+const goodsLine = (d: Donation) => [
+  d.delivery === 'Pick up' ? 'Pick up' : d.delivery === 'Drop off' ? 'Drop off' : '',
+  d.preferred_date ? new Date(`${d.preferred_date}T12:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : '',
+  d.phone || '',
+  Number(d.amount) > 0 ? `≈ ${peso(Number(d.amount))}` : '',
+].filter(Boolean).join(' · ')
+
 export function DonationsPage() {
   const { confirm, dialog } = useConfirm()
   const [rows, setRows] = useState<Donation[]>([])
@@ -1139,7 +1233,7 @@ export function DonationsPage() {
   async function decide(d: Donation, confirm: boolean) {
     const { error } = await supabase.rpc('decide_donation', { p_id: d.id, p_confirm: confirm })
     if (error) return error.message
-    setFlash(confirm ? `${peso(Number(d.amount))} from ${d.name} confirmed.` : `${peso(Number(d.amount))} from ${d.name} rejected.`)
+    setFlash(confirm ? `${shortGift(d)} from ${d.name} confirmed.` : `${shortGift(d)} from ${d.name} rejected.`)
     load()
     return null
   }
@@ -1152,19 +1246,28 @@ export function DonationsPage() {
   const pending = rows.filter((d) => d.status === 'pending')
   const confirmed = rows.filter((d) => d.status === 'confirmed')
   const rejected = rows.filter((d) => d.status === 'rejected')
-  const total = confirmed.reduce((s, d) => s + Number(d.amount), 0)
-  const waiting = pending.reduce((s, d) => s + Number(d.amount), 0)
+  // Money totals only; food & supplies are counted separately.
+  const total = confirmed.filter((d) => !isGoods(d)).reduce((s, d) => s + Number(d.amount), 0)
+  const waiting = pending.filter((d) => !isGoods(d)).reduce((s, d) => s + Number(d.amount), 0)
+  const goodsReceived = confirmed.filter(isGoods).length
 
   const card = (d: Donation, actions: boolean) => (
     <div className="dog-row" key={d.id}>
       <div className="dog-row-main">
-        <span className="person-avatar"><HandCoins size={18} /></span>
+        <span className="person-avatar">{isGoods(d) ? <Package size={18} /> : <HandCoins size={18} />}</span>
         <div className="dog-row-info">
           <div className="dog-row-top">
             <b>{d.name}</b>
-            <span className="amount">{peso(Number(d.amount))}</span>
+            <span className="amount">{isGoods(d) ? 'Food & supplies' : peso(Number(d.amount))}</span>
           </div>
-          <div className="dog-row-meta">{d.method}{d.reference_no ? ` · Ref ${d.reference_no}` : ''} · {d.purpose}</div>
+          {isGoods(d) ? (
+            <>
+              <div className="dog-row-note">{d.items}</div>
+              {goodsLine(d) ? <div className="dog-row-meta">{goodsLine(d)}</div> : null}
+            </>
+          ) : (
+            <div className="dog-row-meta">{d.method}{d.reference_no ? ` · Ref ${d.reference_no}` : ''} · {d.purpose}</div>
+          )}
           <div className="dog-row-meta">{ago(d.created_at)}{d.email ? ` · ${d.email}` : ''}</div>
           {d.message ? <div className="dog-row-note">{d.message}</div> : null}
         </div>
@@ -1175,8 +1278,10 @@ export function DonationsPage() {
           {actions ? (
             <>
               <button className="btn btn-primary btn-sm" type="button" onClick={() => confirm({
-                title: `Confirm ${peso(Number(d.amount))} from ${d.name}?`,
-                body: <>Only confirm if you found this payment{d.reference_no ? <> with reference <b>{d.reference_no}</b></> : null} in {d.method}. It will be added to the totals{d.email ? ' and the donor will get a thank-you email' : ''}.</>,
+                title: `Confirm ${shortGift(d)} from ${d.name}?`,
+                body: isGoods(d)
+                  ? <>Only confirm once these items have reached the shelter: <b>{d.items}</b>.{d.email ? ' The donor will get a thank-you email.' : ''}</>
+                  : <>Only confirm if you found this payment{d.reference_no ? <> with reference <b>{d.reference_no}</b></> : null} in {d.method}. It will be added to the totals{d.email ? ' and the donor will get a thank-you email' : ''}.</>,
                 confirmLabel: 'Confirm donation',
                 action: () => decide(d, true),
               })}>
@@ -1196,11 +1301,15 @@ export function DonationsPage() {
   ) : (
     <div className="table-wrap">
       <table>
-        <thead><tr><th>From</th><th>Amount</th><th>Method</th><th>Reference</th><th>Purpose</th><th>When</th><th></th></tr></thead>
+        <thead><tr><th>From</th><th>Amount / items</th><th>Method</th><th>Reference / delivery</th><th>Purpose</th><th>When</th><th></th></tr></thead>
         <tbody>
           {list.length ? list.map((d) => (
             <tr key={d.id}>
-              <td>{d.name}</td><td>{peso(Number(d.amount))}</td><td>{d.method}</td><td>{d.reference_no || '—'}</td><td>{d.purpose}</td><td>{ago(d.created_at)}</td>
+              <td>{d.name}</td>
+              <td>{isGoods(d) ? <span title={d.items}>{(d.items || '').length > 40 ? d.items!.slice(0, 40) + '…' : d.items}</span> : peso(Number(d.amount))}</td>
+              <td>{isGoods(d) ? 'Food & supplies' : d.method}</td>
+              <td>{isGoods(d) ? goodsLine(d) || '—' : d.reference_no || '—'}</td>
+              <td>{d.purpose}</td><td>{ago(d.created_at)}</td>
               <td>
                 <div className="inline">
                   {d.receipt_path ? <button className="btn btn-ghost" type="button" onClick={() => openReceipt(d)}><ImageIcon size={14} /> Receipt</button> : null}
@@ -1222,6 +1331,7 @@ export function DonationsPage() {
       <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
         <Kpi icon={<HandCoins size={18} />} n={peso(total)} l="Confirmed donations" />
         <Kpi icon={<ClipboardList size={18} />} n={`${pending.length} · ${peso(waiting)}`} l="Waiting to confirm" tone="warn" />
+        <Kpi icon={<Package size={18} />} n={goodsReceived} l="Food & supplies received" />
       </div>
 
       <h2 className="table-h">Waiting to confirm {pending.length ? <span className="nav-badge">{pending.length}</span> : null}</h2>
@@ -1252,8 +1362,10 @@ export function DonationsPage() {
             return err
           }}
         >
-          Only reject it if you can't find {peso(Number(reject.amount))}{reject.reference_no ? ` with reference ${reject.reference_no}` : ''} in GCash or the bank.
-          It won't be counted in the totals.
+          {isGoods(reject)
+            ? <>Only reject it if these items won't be coming: {reject.items}.</>
+            : <>Only reject it if you can't find {peso(Number(reject.amount))}{reject.reference_no ? ` with reference ${reject.reference_no}` : ''} in GCash or the bank.
+              It won't be counted in the totals.</>}
         </ConfirmDialog>
       ) : null}
       {receiptUrl ? (

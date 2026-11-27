@@ -178,9 +178,17 @@ Deno.serve(async (req) => {
     if (!d) return json({ skipped: true })
     if (!looksLikeEmail(d.email)) return json({ skipped: true })
 
+    const goods = d.method === 'In-kind Donation'
     const amount = '₱' + Number(d.amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     const who = d.anonymous || !d.name || d.name === 'Anonymous' ? 'friend' : String(d.name).split(' ')[0]
     const ref = d.reference_no ? ` (reference no. ${d.reference_no})` : ''
+    // Food & supplies: thank them for the items, not a peso amount.
+    const gift = goods ? `your donation of ${d.items || 'food and supplies'}` : `your donation of ${amount} via ${d.method}${ref}`
+    const how = d.delivery === 'Pick up'
+      ? 'Our staff will contact you to arrange the pick-up.'
+      : d.delivery === 'Drop off'
+        ? 'You can drop it off at the Ormoc City Dog Pound, Brgy. Cagbuhangin, any day from 9 AM to 10 PM.'
+        : ''
     const subject = event === 'confirmed'
       ? 'Your donation to Ormoc Strays Oasis is confirmed'
       : 'Thank you for your donation to Ormoc Strays Oasis'
@@ -188,8 +196,8 @@ Deno.serve(async (req) => {
       ? [
           `Dear ${who},`,
           '',
-          `We have received your donation of ${amount} via ${d.method}${ref}. Thank you!`,
-          `It will go to: ${d.purpose}.`,
+          goods ? `We have received ${gift}. Thank you!` : `We have received your donation of ${amount} via ${d.method}${ref}. Thank you!`,
+          goods ? 'It goes straight to the dogs in our care.' : `It will go to: ${d.purpose}.`,
           '',
           'Every peso helps us feed, treat and rehome the dogs at the Ormoc City Dog Pound. Because of you, they get a second chance.',
           '',
@@ -199,8 +207,10 @@ Deno.serve(async (req) => {
       : [
           `Dear ${who},`,
           '',
-          `Thank you for your donation of ${amount} via ${d.method}${ref}!`,
-          'Our staff will check it against the payment record and confirm it shortly. We will email you again once it is confirmed.',
+          goods ? `Thank you for ${gift}!` : `Thank you for your donation of ${amount} via ${d.method}${ref}!`,
+          goods
+            ? `${how} We will email you again once the items are received.`.trim()
+            : 'Our staff will check it against the payment record and confirm it shortly. We will email you again once it is confirmed.',
           '',
           'From all of us and the dogs in our care, thank you for your kindness.',
           '',

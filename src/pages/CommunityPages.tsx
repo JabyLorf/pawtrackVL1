@@ -298,7 +298,7 @@ export function CommunityPage() {
     })
 
   return (
-    <PublicLayout>
+    <PublicLayout noFooter>
       <section className="block community">
         <div className="feed-wrap">
           <div className="feed-top">
@@ -410,7 +410,7 @@ export function PostPage() {
   }
 
   return (
-    <PublicLayout>
+    <PublicLayout noFooter>
       <section className="block community">
         <div className="feed-wrap">
           <Link className="link back-link" to="/community">← Community</Link>
@@ -574,7 +574,7 @@ export function NewPostPage() {
   }
 
   return (
-    <PublicLayout>
+    <PublicLayout noFooter>
       <section className="block community">
         <div className="feed-wrap">
           <Link className="link back-link" to="/community">← Community</Link>
@@ -786,7 +786,7 @@ export function ProfilePage() {
   }
 
   return (
-    <PublicLayout>
+    <PublicLayout noFooter>
       <section className="block community">
         <div className="feed-wrap wide">
           {missing ? (
@@ -815,7 +815,7 @@ export function ProfilePage() {
                         <button className="btn btn-light btn-sm" type="button" onClick={() => setEditing(true)}><Pencil size={15} /> Edit profile</button>
                         <button className="btn btn-primary btn-sm" type="button" onClick={() => navigate('/community/new')}><ImagePlus size={15} /> New post</button>
                         {isStaff ? <Link className="btn btn-light btn-sm" to="/ops">Staff desk</Link> : null}
-                        <button className="btn btn-light btn-sm" type="button" onClick={askSignOut}>Sign out</button>
+                        <button className="btn btn-light btn-sm hide-phone" type="button" onClick={askSignOut}>Sign out</button>
                       </>
                     ) : (
                       <>

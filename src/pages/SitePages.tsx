@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { PublicLayout } from '../components/PublicLayout'
 import { Modal } from '../components/Modal'
 import { useLeaveGuard } from '../components/useLeaveGuard'
-import { ArrowLeft, ArrowRight, CheckCircle2, Circle, Download, HeartHandshake, Loader2, Send } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CheckCircle2, Circle, Download, HandCoins, HeartHandshake, Loader2, Package, Send } from 'lucide-react'
 
 const PURPOSES = ['General Fund', 'Dog Food & Supplies', 'Veterinary Care', 'Spay & Neuter Program', 'Shelter Upkeep']
 // Where donors can send money. Shown on the "Scan & pay" step.
@@ -17,10 +17,182 @@ const METHODS: Array<[string, string]> = [
   ['GoTyme', 'GoTyme Bank'],
   ['Bank Transfer', 'Other bank / InstaPay'],
   ['Cash / Walk-in', 'Cash at the shelter'],
-  ['In-kind Donation', 'Food or supplies (in-kind)'],
 ]
 
+// Food & supplies donations: quick picks, then the donor describes amounts.
+const GOODS = ['Dog food', 'Treats', 'Medicine & vitamins', 'Blankets & bedding', 'Cleaning supplies', 'Leashes & collars', 'Other']
+
+const today = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** "Food & supplies" side of the Donate page. */
+function GoodsDonation() {
+  const [step, setStep] = useState<'form' | 'done'>('form')
+  const [kinds, setKinds] = useState<string[]>([])
+  const [items, setItems] = useState('')
+  const [delivery, setDelivery] = useState<'Drop off' | 'Pick up'>('Drop off')
+  const [date, setDate] = useState('')
+  const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
+  const [value, setValue] = useState('')
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const sending = useRef(false)
+
+  const dirty = step === 'form' && !!(kinds.length || items.trim() || name.trim() || phone.trim() || email.trim() || message.trim())
+  const { leaveDialog } = useLeaveGuard(dirty, { what: 'this donation' })
+
+  // What the staff see: the ticked kinds plus the donor's own description.
+  const summary = [kinds.filter((k) => k !== 'Other').join(', '), items.trim()].filter(Boolean).join(' — ')
+  const phoneOk = phone.replace(/\D/g, '').length >= 7
+
+  function review(e: FormEvent) {
+    e.preventDefault()
+    if (!kinds.length && !items.trim()) { setError('Tell us what you would like to donate.'); return }
+    if (!items.trim()) { setError('Describe the items and how much, e.g. "2 sacks of dog food, 20 kg each".'); return }
+    if (delivery === 'Pick up' && !phoneOk) { setError('Add a phone number so we can arrange the pick-up.'); return }
+    if (phone.trim() && !phoneOk) { setError('Check the phone number.'); return }
+    setError('')
+    setConfirming(true)
+  }
+
+  async function submit() {
+    if (sending.current) return
+    sending.current = true
+    setBusy(true)
+    setError('')
+    const { error: err } = await supabase.from('donations').insert({
+      name: name.trim() || 'Anonymous',
+      anonymous: !name.trim(),
+      email: email.trim(),
+      phone: phone.trim(),
+      amount: value ? Number(value) : 0,
+      method: 'In-kind Donation',
+      purpose: 'Dog Food & Supplies',
+      items: summary.slice(0, 1000),
+      delivery,
+      preferred_date: date || null,
+      message: message.trim(),
+    })
+    setBusy(false)
+    sending.current = false
+    setConfirming(false)
+    if (err) { setError(err.message); return }
+    setStep('done')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function reset() {
+    setKinds([]); setItems(''); setDelivery('Drop off'); setDate(''); setName(''); setPhone(''); setEmail(''); setValue(''); setMessage('')
+    setStep('form')
+  }
+
+  if (step === 'done') {
+    return (
+      <div className="donate-done">
+        <div className="auth-icon success"><HeartHandshake size={26} /></div>
+        <h3>Thank you for your kindness!</h3>
+        <p className="muted">
+          {delivery === 'Pick up'
+            ? 'Our staff will call or text you to arrange the pick-up.'
+            : 'You can drop it off at the Ormoc City Dog Pound, Brgy. Cagbuhangin, any day from 9 AM to 10 PM.'}
+          {email.trim() ? ' A thank-you note is on its way to your email.' : ''}
+        </p>
+        <button className="btn btn-light btn-block" type="button" onClick={reset}>Donate something else</button>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <form onSubmit={review}>
+        <h3>Donate food & supplies</h3>
+        <p className="muted">Tell us what you'd like to give. We'll confirm it once it reaches the shelter.</p>
+
+        <label>What are you donating? *</label>
+        <div className="goods-chips">
+          {GOODS.map((g) => {
+            const on = kinds.includes(g)
+            return (
+              <button key={g} type="button" className={'goods-chip' + (on ? ' on' : '')} aria-pressed={on}
+                onClick={() => setKinds((k) => (on ? k.filter((x) => x !== g) : [...k, g]))}>
+                {g}
+              </button>
+            )
+          })}
+        </div>
+        <label htmlFor="g-items">Items and how much *</label>
+        <textarea id="g-items" rows={3} maxLength={600} placeholder="e.g. 2 sacks of dog food (20 kg each), 1 box of dewormer" value={items} onChange={(e) => setItems(e.target.value)} />
+
+        <label>How will it reach us?</label>
+        <div className="pay-tabs" role="radiogroup">
+          <button type="button" role="radio" aria-checked={delivery === 'Drop off'} className={delivery === 'Drop off' ? 'on' : ''} onClick={() => setDelivery('Drop off')}>I'll drop it off</button>
+          <button type="button" role="radio" aria-checked={delivery === 'Pick up'} className={delivery === 'Pick up' ? 'on' : ''} onClick={() => setDelivery('Pick up')}>Please pick it up</button>
+        </div>
+        <p className="hint" style={{ marginTop: 6 }}>
+          {delivery === 'Drop off' ? 'Ormoc City Dog Pound, Brgy. Cagbuhangin · open every day, 9 AM to 10 PM.' : 'Pick-ups are around Ormoc City. Our staff will contact you.'}
+        </p>
+
+        <label htmlFor="g-date">{delivery === 'Drop off' ? 'When will you come?' : 'Best day for pick-up'} <span className="muted">(optional)</span></label>
+        <input id="g-date" type="date" min={today()} value={date} onChange={(e) => setDate(e.target.value)} />
+
+        <label htmlFor="g-name">Your name <span className="muted">(optional)</span></label>
+        <input id="g-name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+        <label htmlFor="g-phone">Phone {delivery === 'Pick up' ? '*' : <span className="muted">(optional)</span>}</label>
+        <input id="g-phone" type="tel" inputMode="tel" maxLength={20} placeholder="09XX XXX XXXX" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" />
+        <label htmlFor="g-email">Email <span className="muted">(optional, for a thank-you)</span></label>
+        <input id="g-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+
+        <label htmlFor="g-value">Estimated value <span className="muted">(optional)</span></label>
+        <div className="peso-input">
+          <span aria-hidden="true">₱</span>
+          <input id="g-value" inputMode="numeric" autoComplete="off" placeholder="0" value={value}
+            onChange={(e) => setValue(e.target.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 6))} />
+        </div>
+
+        <label htmlFor="g-msg">Message <span className="muted">(optional)</span></label>
+        <textarea id="g-msg" rows={2} value={message} onChange={(e) => setMessage(e.target.value)} />
+
+        {error ? <p className="err">{error}</p> : null}
+        <button className="btn btn-primary btn-block" type="submit" style={{ marginTop: 14 }}>Submit donation</button>
+      </form>
+      {confirming ? (
+        <Modal onClose={() => { if (!busy) setConfirming(false) }}>
+          <div className="dialog">
+            <div className="auth-icon"><HeartHandshake size={22} /></div>
+            <h2>Submit this donation?</h2>
+            <p className="auth-sub">Please check the details.</p>
+            <div className="adopt-review">
+              <div><span>Donating</span><b>{summary}</b></div>
+              <div><span>Delivery</span><b>{delivery === 'Drop off' ? "I'll drop it off" : 'Please pick it up'}</b></div>
+              {date ? <div><span>Date</span><b>{new Date(`${date}T12:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</b></div> : null}
+              <div><span>Name</span><b>{name.trim() || 'Anonymous'}</b></div>
+              {phone.trim() ? <div><span>Phone</span><b>{phone.trim()}</b></div> : null}
+              {email.trim() ? <div><span>Email</span><b>{email.trim()}</b></div> : null}
+              {value ? <div><span>Estimated value</span><b>₱{Number(value).toLocaleString('en-PH')}</b></div> : null}
+            </div>
+            {error ? <p className="err">{error}</p> : null}
+            <div className="dialog-actions">
+              <button className="btn btn-light" type="button" disabled={busy} onClick={() => setConfirming(false)}>Edit</button>
+              <button className="btn btn-primary" type="button" disabled={busy} onClick={submit}>
+                {busy ? <><Loader2 size={16} className="spin" /> Submitting…</> : 'Yes, submit'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+      {leaveDialog}
+    </>
+  )
+}
+
 export function DonatePage() {
+  const [gift, setGift] = useState<'money' | 'goods'>('money')
   const [step, setStep] = useState<'pay' | 'details' | 'done'>('pay')
   const [amount, setAmount] = useState('')
   const [method, setMethod] = useState('GCash')
@@ -44,7 +216,7 @@ export function DonatePage() {
   const ready = amountOk && refOk
 
   const [confirming, setConfirming] = useState(false)
-  const dirty = step === 'details' || step !== 'done' && !!(amount || reference.trim() || name.trim() || email.trim() || message.trim() || receipt)
+  const dirty = gift === 'money' && (step === 'details' || step !== 'done' && !!(amount || reference.trim() || name.trim() || email.trim() || message.trim() || receipt))
   const { leaveDialog } = useLeaveGuard(dirty, { what: 'this donation' })
 
   function review(e: FormEvent) {
@@ -116,6 +288,16 @@ export function DonatePage() {
             </div>
 
             <div className="card-panel donate-card">
+              <div className="gift-tabs" role="tablist" aria-label="What would you like to give?">
+                <button type="button" role="tab" aria-selected={gift === 'money'} className={gift === 'money' ? 'on' : ''} onClick={() => setGift('money')}>
+                  <HandCoins size={18} /> Money
+                </button>
+                <button type="button" role="tab" aria-selected={gift === 'goods'} className={gift === 'goods' ? 'on' : ''} onClick={() => setGift('goods')}>
+                  <Package size={18} /> Food & supplies
+                </button>
+              </div>
+              {gift === 'goods' ? <GoodsDonation /> : (
+              <>
               <ol className="steps" aria-label="Donation steps">
                 <li className={step === 'pay' ? 'on' : 'done'}><span>1</span> Scan & pay</li>
                 <li className={step === 'details' ? 'on' : step === 'done' ? 'done' : ''}><span>2</span> Your details</li>
@@ -167,7 +349,7 @@ export function DonatePage() {
                     I've sent my donation <ArrowRight size={17} />
                   </button>
                   <button className="link center-link" type="button" onClick={() => { setMethod('Cash / Walk-in'); setStep('details') }}>
-                    Giving cash or supplies at the shelter instead?
+                    Giving cash at the shelter instead?
                   </button>
                 </div>
               ) : step === 'details' ? (
@@ -180,7 +362,7 @@ export function DonatePage() {
                     {METHODS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
 
-                  <label htmlFor="d-amount">Amount you {method === 'In-kind Donation' ? 'estimate' : 'sent'} *</label>
+                  <label htmlFor="d-amount">Amount you sent *</label>
                   <div className="peso-input">
                     <span aria-hidden="true">₱</span>
                     <input
@@ -253,6 +435,8 @@ export function DonatePage() {
                   </p>
                   <button className="btn btn-light btn-block" type="button" onClick={reset}>Make another donation</button>
                 </div>
+              )}
+              </>
               )}
             </div>
           </div>
