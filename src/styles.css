@@ -611,6 +611,7 @@ fieldset.plain:disabled { opacity: .65; }
 .post-head > a { display: flex; }
 .post-who { display: grid; min-width: 0; flex: 1; }
 .post-who small a { color: var(--muted); text-decoration: none; font-size: .8rem; }
+.post-sub { color: var(--muted); font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .post-photo { background: #0b1513; display: flex; justify-content: center; }
 .post-photo img { width: 100%; max-height: 640px; object-fit: contain; display: block; }
 .post-actions { display: flex; align-items: center; gap: 2px; padding: 6px 8px 0; }
@@ -635,6 +636,7 @@ fieldset.plain:disabled { opacity: .65; }
 .comment-main { flex: 1; min-width: 0; }
 .comment-main p { font-size: .93rem; overflow-wrap: anywhere; }
 .comment-text { white-space: pre-wrap; }
+.comment-text .mention { color: var(--brand); font-weight: 600; text-decoration: none; }
 .comment-main small { font-size: .78rem; }
 .comment-form { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }
 .comment-form textarea { flex: 1; resize: none; min-height: 40px; max-height: 120px; border-radius: 20px; padding: 9px 14px; }

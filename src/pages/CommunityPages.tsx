@@ -167,7 +167,7 @@ function PostCard({ post, onChange, full, onOpenDog, onFollowed }: {
               </>
             ) : null}
           </span>
-          <small><Link to={`/community/p/${post.id}`}>{ago(post.created_at)}</Link></small>
+          <small className="post-sub"><Link to={`/community/u/${post.username}`}>@{post.username}</Link> · <Link to={`/community/p/${post.id}`}>{ago(post.created_at)}</Link></small>
         </div>
         {canPost && !mine ? (
           <button className="icon-btn" type="button" aria-label="Report post" title="Report" onClick={() => setReporting(true)}><Flag size={16} /></button>
@@ -371,7 +371,7 @@ export function PostPage() {
     if (!canPost) { join(); return }
     // Replies to a reply join the same thread, like Instagram.
     setReplyTo({ id: c.parent_id || c.id, username: c.username, name: c.display_name })
-    setText((t) => (t.startsWith(`@${c.username} `) ? t : `@${c.username} `))
+    setText((t) => (t.startsWith(`@${c.display_name} `) ? t : `@${c.display_name} `))
     setTimeout(() => box.current?.focus(), 0)
   }
 
@@ -427,12 +427,15 @@ export function PostPage() {
                 {comments.filter((c) => !c.parent_id).map((c) => {
                   const replies = comments.filter((r) => r.parent_id === c.id)
                   const row = (x: PostComment, reply: boolean) => {
+                    // A reply that starts with "@Name" (or an older "@username") shows the name as a link.
+                    const tagged = reply ? comments.find((y) => x.body.startsWith(`@${y.display_name} `) || x.body.startsWith(`@${y.username} `)) : undefined
+                    const tag = tagged ? (x.body.startsWith(`@${tagged.display_name} `) ? `@${tagged.display_name} ` : `@${tagged.username} `) : ''
                     const canDelete = profile?.id === x.author_id || profile?.id === post.author_id || isStaff
                     return (
                       <div className={'comment' + (reply ? ' reply' : '')} key={x.id}>
                         <Link to={`/community/u/${x.username}`}><Avatar src={x.avatar_url} name={x.display_name} size={reply ? 26 : 30} /></Link>
                         <div className="comment-main">
-                          <p><Name p={x} /> <span className="comment-text">{x.body}</span></p>
+                          <p><Name p={x} /> <span className="comment-text">{tagged ? <><Link className="mention" to={`/community/u/${tagged.username}`}>@{tagged.display_name}</Link> {x.body.slice(tag.length)}</> : x.body}</span></p>
                           <div className="comment-meta">
                             <small className="muted">{ago(x.created_at)}</small>
                             <button className="link comment-reply" type="button" onClick={() => startReply(x)}>Reply</button>
