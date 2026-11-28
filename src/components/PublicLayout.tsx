@@ -141,8 +141,8 @@ export function PublicLayout({ children, noFooter }: { children: ReactNode; noFo
           </div>
           <div>
             <h4>Contact</h4>
-            <p className="foot-line"><Phone size={14} /> 0946 468 0043</p>
-            <p className="foot-line"><Mail size={14} /> ormocstraysoasis@gmail.com</p>
+            <p className="foot-line"><Phone size={14} /> <a href="tel:+639460297064">0946 029 7064</a></p>
+            <p className="foot-line"><Mail size={14} /> <a href="mailto:pawtrackoso@gmail.com">pawtrackoso@gmail.com</a></p>
             <p className="foot-line"><MapPin size={14} /> Brgy. Cagbuhangin, Ormoc City</p>
           </div>
           <div>

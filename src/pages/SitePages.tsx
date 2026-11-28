@@ -3,7 +3,9 @@ import { supabase } from '../lib/supabase'
 import { PublicLayout } from '../components/PublicLayout'
 import { Modal } from '../components/Modal'
 import { useLeaveGuard } from '../components/useLeaveGuard'
-import { ArrowLeft, ArrowRight, CheckCircle2, Circle, Download, HandCoins, HeartHandshake, Loader2, Package, Send } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CheckCircle2, Circle, ClipboardList, Download, HandCoins, HeartHandshake, Loader2, Package, Search, Send, Smartphone, Users } from 'lucide-react'
+import { GetAppButtons } from '../components/IosInstall'
+import { showAppLinks } from '../lib/app'
 
 const PURPOSES = ['General Fund', 'Dog Food & Supplies', 'Veterinary Care', 'Spay & Neuter Program', 'Shelter Upkeep']
 // Where donors can send money. Shown on the "Scan & pay" step.
@@ -471,6 +473,13 @@ export function DonatePage() {
   )
 }
 
+const PAWTRACK_FEATURES: Array<[typeof Search, string, string]> = [
+  [Search, 'Find a dog to adopt', 'Browse the dogs ready for a home, see their photos and details, and send an adoption application.'],
+  [HandCoins, 'Donate money or supplies', 'Give through GCash, GoTyme or bank transfer, or offer food and supplies for drop-off or pick-up.'],
+  [Users, 'Join the community', 'Share photos of your rescue, follow other dog lovers, comment, and message each other.'],
+  [ClipboardList, 'Help the staff', 'Shelter staff keep every dog\'s intake, health, adoption and records in one place.'],
+]
+
 export function AboutPage() {
   return (
     <PublicLayout>
@@ -479,8 +488,51 @@ export function AboutPage() {
           <div className="section-head">
             <p className="kicker">About us</p>
             <h2>Every life deserves a chance</h2>
-            <p className="muted">Ormoc Strays Oasis is a non-profit animal rescue and rehabilitation group based in Ormoc City, Leyte.</p>
+            <p className="muted">Ormoc Strays Oasis is a non-profit animal rescue and rehabilitation group based in Ormoc City, Leyte. We take in abandoned, neglected and abused dogs, nurse them back to health, and find them loving homes.</p>
           </div>
+          <div className="about-cards">
+            <article className="about-card">
+              <img src="/about/shelter-mural.webp" alt="The shelter wall in Brgy. Cagbuhangin, painted with portraits of rescued dogs" loading="lazy" width={1000} height={667} />
+              <div>
+                <h3>Our shelter</h3>
+                <p>You'll find us at the Ormoc City Dog Pound in Brgy. Cagbuhangin, behind the wall painted with the faces of dogs we've rescued. Visitors are welcome every day from 9 AM to 10 PM.</p>
+              </div>
+            </article>
+            <article className="about-card">
+              <img src="/about/shelter-dogs.webp" alt="Rescued dogs resting and playing together at the shelter" loading="lazy" width={1000} height={667} />
+              <div>
+                <h3>Our dogs</h3>
+                <p>Dozens of rescued dogs live here while they heal. Each one is fed, treated, vaccinated and loved by our volunteers until the day they go home with a new family.</p>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+      <section className="block about-app">
+        <div className="container">
+          <div className="section-head">
+            <p className="kicker">About PawTrack</p>
+            <h2>One place for the shelter and its friends</h2>
+            <p className="muted">PawTrack is the website and Android app of Ormoc Strays Oasis. It connects the shelter with adopters, donors and dog lovers, and helps our staff look after every dog.</p>
+          </div>
+          <div className="about-features">
+            {PAWTRACK_FEATURES.map(([Icon, title, text]) => (
+              <div className="about-feature" key={title}>
+                <span className="about-feature-icon"><Icon size={20} /></span>
+                <h3>{title}</h3>
+                <p>{text}</p>
+              </div>
+            ))}
+          </div>
+          {showAppLinks ? (
+            <div className="about-get">
+              <div>
+                <h3><Smartphone size={18} /> Take PawTrack with you</h3>
+                <p className="muted">The free Android app has everything on this website. On iPhone, add PawTrack to your Home Screen from Safari.</p>
+              </div>
+              <div className="about-get-buttons"><GetAppButtons className="btn btn-primary" iphoneClassName="btn btn-light" size={17} both androidLabel="Download the Android app" /></div>
+            </div>
+          ) : null}
         </div>
       </section>
     </PublicLayout>
@@ -539,8 +591,8 @@ export function ContactPage() {
           <div className="card-panel">
             <h3>Visit us</h3>
             <p>Brgy. Cagbuhangin, Ormoc City</p>
-            <p>0946 468 0043</p>
-            <p>ormocstraysoasis@gmail.com</p>
+            <p><a className="link" href="tel:+639460297064">0946 029 7064</a></p>
+            <p><a className="link" href="mailto:pawtrackoso@gmail.com">pawtrackoso@gmail.com</a></p>
             <p className="muted">Open everyday 9AM–10PM</p>
           </div>
         </div>

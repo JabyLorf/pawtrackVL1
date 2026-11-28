@@ -19,7 +19,11 @@ export function HomePage() {
   }, [])
   return (
     <PublicLayout>
-      <section className="hero">
+      <section className="hero hero-photos">
+        <div className="hero-bg" aria-hidden="true">
+          <span style={{ backgroundImage: 'url(/hero/shelter-1.webp)' }} />
+          <span style={{ backgroundImage: 'url(/hero/shelter-2.webp)' }} />
+        </div>
         <div className="container">
           <span className="kicker" style={{ color: '#fde68a' }}>Non-profit animal rescue · Ormoc City</span>
           <h1>Their second chance starts with you</h1>

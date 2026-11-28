@@ -130,6 +130,28 @@ a { color: inherit; }
 .hero h1 { color: #fff; font-size: clamp(2.1rem, 5vw, 3.4rem); max-width: 17ch; letter-spacing: -0.03em; margin-top: .6rem; }
 .hero .tagline { max-width: 54ch; margin: 1.1rem 0 1.8rem; font-size: 1.08rem; color: #cbe6e2; }
 .hero .kicker { color: #fcd34d !important; }
+/* Home hero: two shelter photos that slowly fade into each other, under a teal tint so the text stays readable. */
+.hero-photos { position: relative; overflow: hidden; isolation: isolate; }
+.hero-photos > .container { position: relative; z-index: 2; }
+.hero-bg { position: absolute; inset: 0; z-index: 0; background: #083f3a; }
+.hero-bg span { position: absolute; inset: 0; background-size: cover; background-position: center 40%; animation: hero-fade 16s ease-in-out infinite; }
+.hero-bg span:nth-child(2) { animation-delay: -8s; }
+.hero-bg::after {
+  content: ""; position: absolute; inset: 0; z-index: 1;
+  background: linear-gradient(90deg, rgba(8, 63, 58, .94) 0%, rgba(11, 89, 82, .82) 45%, rgba(11, 89, 82, .45) 100%);
+}
+@keyframes hero-fade {
+  0%, 40% { opacity: 1; transform: scale(1.06); }
+  50%, 90% { opacity: 0; transform: scale(1); }
+  100% { opacity: 1; transform: scale(1.06); }
+}
+@media (max-width: 720px) {
+  .hero-bg::after { background: linear-gradient(180deg, rgba(8, 63, 58, .86) 0%, rgba(11, 89, 82, .74) 100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-bg span { animation: none; }
+  .hero-bg span:nth-child(2) { display: none; }
+}
 .app-cta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
 .app-cta .btn { padding: 12px 20px; }
 .app-cta small { color: #a9d4ce; font-size: .85rem; }
@@ -371,6 +393,10 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--b
 .page-sub { color: var(--muted); margin: 4px 0 20px; }
 .kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
 .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow-sm); }
+.kpi-link { display: block; color: inherit; text-decoration: none; transition: border-color .15s, box-shadow .15s, transform .15s; }
+.kpi-link:hover { border-color: var(--line-strong); box-shadow: var(--shadow); transform: translateY(-1px); }
+.kpi-link:focus-visible { outline: none; box-shadow: var(--ring); }
+.kpi-link:active { transform: none; }
 .kpi-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--brand-light); color: var(--brand); margin-bottom: 12px; }
 .kpi.warn .kpi-icon { background: var(--accent-light); color: var(--accent-dark); }
 .kpi.muted .kpi-icon { background: #eef1f0; color: var(--muted); }
@@ -903,3 +929,33 @@ a .avatar, a:has(> .avatar) { text-decoration: none; }
 .page-head-row + .page-sub { margin-top: 6px; }
 .download-wrap { display: inline-grid; justify-items: end; gap: 4px; max-width: 100%; }
 .download-wrap small { font-size: .78rem; text-align: right; }
+
+/* About page: photo cards and the PawTrack intro */
+.about-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; }
+.about-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow); display: flex; flex-direction: column; }
+.about-card img { width: 100%; height: auto; aspect-ratio: 3 / 2; object-fit: cover; display: block; background: var(--brand-light); }
+.about-card > div { padding: 1.25rem 1.4rem 1.5rem; }
+.about-card h3 { margin: 0 0 .4rem; font-size: 1.15rem; }
+.about-card p { margin: 0; color: var(--ink-soft); }
+.about-app { background: var(--brand-light); }
+.about-features { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+.about-feature { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.2rem; }
+.about-feature-icon { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--brand-light); color: var(--brand); margin-bottom: .7rem; }
+.about-feature h3 { font-size: 1rem; margin: 0 0 .35rem; }
+.about-feature p { margin: 0; font-size: .92rem; color: var(--ink-soft); }
+.about-get { margin-top: 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1.2rem; flex-wrap: wrap; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 1.3rem 1.5rem; }
+.about-get h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 .25rem; font-size: 1.05rem; }
+.about-get p { margin: 0; }
+.about-get-buttons { display: flex; gap: .6rem; flex-wrap: wrap; }
+.foot-line a { color: inherit; text-decoration: none; }
+.foot-line a:hover { text-decoration: underline; }
+@media (max-width: 900px) { .about-features { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) {
+  .about-cards, .about-features { grid-template-columns: 1fr; }
+  .about-get-buttons, .about-get-buttons .btn { width: 100%; }
+}
+
+.download-dialog { display: grid; gap: .5rem; text-align: left; }
+.download-dialog .auth-icon, .download-dialog h2, .download-dialog .auth-sub { justify-self: center; text-align: center; }
+.download-dialog label { font-weight: 600; font-size: .9rem; margin-top: .4rem; }
+.download-dialog .dialog-actions { margin-top: .6rem; }

@@ -14,14 +14,16 @@ import { ConfirmDialog, useConfirm } from '../components/ConfirmDialog'
 import { useLeaveGuard } from '../components/useLeaveGuard'
 import { ClipboardList, Download, HandCoins, Package, HeartHandshake, Inbox, PawPrint, Stethoscope, Syringe, Tag, UserCheck, UserX, X, Reply, Users, Check, Loader2, Send, Trash2, RotateCcw, Plus, CheckCircle2, Image as ImageIcon, Pencil } from 'lucide-react'
 
-function Kpi({ icon, n, l, tone }: { icon: ReactNode; n: ReactNode; l: string; tone?: 'warn' | 'muted' }) {
-  return (
-    <div className={'kpi' + (tone ? ' ' + tone : '')}>
+function Kpi({ icon, n, l, tone, to }: { icon: ReactNode; n: ReactNode; l: string; tone?: 'warn' | 'muted'; to?: string }) {
+  const cls = 'kpi' + (tone ? ' ' + tone : '') + (to ? ' kpi-link' : '')
+  const inner = (
+    <>
       <span className="kpi-icon">{icon}</span>
       <div className="n">{n}</div>
       <div className="l">{l}</div>
-    </div>
+    </>
   )
+  return to ? <Link className={cls} to={to}>{inner}</Link> : <div className={cls}>{inner}</div>
 }
 
 export function DashboardPage() {
@@ -55,14 +57,14 @@ export function DashboardPage() {
       <h1 className="page-h1">Dashboard</h1>
       <p className="page-sub">A quick look at the shelter today.</p>
       <div className="kpi-grid">
-        <Kpi icon={<PawPrint size={18} />} n={care.length} l="Dogs in care" />
-        <Kpi icon={<Tag size={18} />} n={available} l="Available for adoption" />
-        <Kpi icon={<ClipboardList size={18} />} n={pendingApps} l="Pending applications" tone="warn" />
-        <Kpi icon={<Syringe size={18} />} n={treatment} l="Under treatment" />
-        <Kpi icon={<HeartHandshake size={18} />} n={adopted} l="Adopted" />
-        <Kpi icon={<Stethoscope size={18} />} n={deceased} l="Mortality records" tone="muted" />
-        <Kpi icon={<HandCoins size={18} />} n={peso(donated)} l="Confirmed donations" />
-        <Kpi icon={<Inbox size={18} />} n={unread} l="Unread messages" tone="warn" />
+        <Kpi icon={<PawPrint size={18} />} n={care.length} l="Dogs in care" to="/ops/dogs" />
+        <Kpi icon={<Tag size={18} />} n={available} l="Available for adoption" to="/ops/dogs" />
+        <Kpi icon={<ClipboardList size={18} />} n={pendingApps} l="Pending applications" tone="warn" to="/ops/adoptions" />
+        <Kpi icon={<Syringe size={18} />} n={treatment} l="Under treatment" to="/ops/intake" />
+        <Kpi icon={<HeartHandshake size={18} />} n={adopted} l="Adopted" to="/ops/adopted" />
+        <Kpi icon={<Stethoscope size={18} />} n={deceased} l="Mortality records" tone="muted" to="/ops/mortality" />
+        <Kpi icon={<HandCoins size={18} />} n={peso(donated)} l="Confirmed donations" to="/ops/donations" />
+        <Kpi icon={<Inbox size={18} />} n={unread} l="Unread messages" tone="warn" to="/ops/inbox" />
       </div>
       <div className="dash-grid">
         <div className="panel">
@@ -281,32 +283,83 @@ export function DogsPage() {
   )
 }
 
-/** "Download" button for a staff record list (CSV for Excel / Google Sheets). */
-function DownloadButton({ build, name }: {
+type CsvRows = { headers: string[]; rows: (string | number | boolean | null | undefined)[][] }
+
+/** "2026-11" for the month a date falls in (local time), or '' when there's no date. */
+const monthOf = (value?: string | null) => isoDay(value).slice(0, 7)
+
+/** The last 24 months, newest first: [["2026-11", "November 2026"], ...]. */
+function recentMonths() {
+  const out: Array<[string, string]> = []
+  const d = new Date()
+  d.setDate(1)
+  for (let i = 0; i < 24; i++) {
+    out.push([isoDay(d).slice(0, 7), d.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })])
+    d.setMonth(d.getMonth() - 1)
+  }
+  return out
+}
+
+/**
+ * "Download" button for a staff record list (CSV for Excel / Google Sheets).
+ * Staff pick one month or all records; `build` gets "2026-11" or null and
+ * keeps only that month's rows (by the date named in `dateLabel`).
+ */
+function DownloadButton({ build, name, dateLabel }: {
   name: string
-  build: () => Promise<{ headers: string[]; rows: (string | number | boolean | null | undefined)[][] }>
+  dateLabel: string
+  build: (month: string | null) => Promise<CsvRows>
 }) {
+  const months = recentMonths()
+  const [open, setOpen] = useState(false)
+  const [month, setMonth] = useState<string>(months[0][0])
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   async function go() {
     setBusy(true)
     setNote('')
     try {
-      const { headers, rows } = await build()
-      if (!rows.length) { setNote('Nothing to download yet.'); return }
-      const msg = await downloadCsv(name, headers, rows)
+      const pick = month === 'all' ? null : month
+      const { headers, rows } = await build(pick)
+      if (!rows.length) {
+        setNote(pick ? `No records for ${months.find(([m]) => m === pick)?.[1]}.` : 'Nothing to download yet.')
+        return
+      }
+      const msg = await downloadCsv(pick ? `${name}-${pick}` : `${name}-all`, headers, rows)
       if (msg) setNote(msg)
+      else setOpen(false)
     } finally {
       setBusy(false)
     }
   }
   return (
-    <span className="download-wrap">
-      <button className="btn btn-light btn-sm" type="button" onClick={go} disabled={busy}>
-        {busy ? <Loader2 size={15} className="spin" /> : <Download size={15} />} Download
+    <>
+      <button className="btn btn-light btn-sm" type="button" onClick={() => { setNote(''); setOpen(true) }}>
+        <Download size={15} /> Download
       </button>
-      {note ? <small className="muted">{note}</small> : null}
-    </span>
+      {open ? (
+        <Modal onClose={() => { if (!busy) setOpen(false) }}>
+          <div className="dialog download-dialog">
+            <div className="auth-icon"><Download size={22} /></div>
+            <h2>Download records</h2>
+            <p className="auth-sub">Saves a spreadsheet you can open in Excel or Google Sheets.</p>
+            <label htmlFor="dl-month">Which records?</label>
+            <select id="dl-month" value={month} onChange={(e) => { setMonth(e.target.value); setNote('') }}>
+              {months.map(([m, label]) => <option key={m} value={m}>{label}</option>)}
+              <option value="all">All records</option>
+            </select>
+            <small className="muted">A month uses the {dateLabel}.</small>
+            {note ? <p className="err">{note}</p> : null}
+            <div className="dialog-actions">
+              <button className="btn btn-light" type="button" onClick={() => setOpen(false)} disabled={busy}>Cancel</button>
+              <button className="btn btn-primary" type="button" onClick={go} disabled={busy}>
+                {busy ? <Loader2 size={15} className="spin" /> : <Download size={15} />} Download
+              </button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+    </>
   )
 }
 
@@ -381,9 +434,9 @@ export function IntakePage() {
     <div>
       <div className="page-head-row">
         <h1 className="page-h1">Intake</h1>
-        <DownloadButton name="pawtrack-intake" build={async () => {
+        <DownloadButton name="pawtrack-intake" dateLabel="date of intake" build={async (month) => {
           const { data } = await supabase.from('intakes').select('*').order('intake_at', { ascending: false })
-          const list = (data as Intake[]) || []
+          const list = ((data as Intake[]) || []).filter((r) => !month || monthOf(r.intake_at) === month)
           return {
             headers: ['Name', 'Sex', 'Age', 'Breed', 'Color', 'Size', 'Reason', 'Date of intake', 'Days in intake', 'Where found', 'Rescued / brought in by',
               'Condition & treatment notes', 'Temperament', '5-in-1 vaccine', 'Anti-rabies', 'Dewormed', 'Spayed / neutered', 'Status', 'Left intake on'],
@@ -482,7 +535,7 @@ export function AdoptedPage() {
     <div>
       <div className="page-head-row">
         <h1 className="page-h1">Adopted</h1>
-        <DownloadButton name="pawtrack-adopted" build={async () => {
+        <DownloadButton name="pawtrack-adopted" dateLabel="adoption date" build={async (month) => {
           const [{ data: d }, { data: a }] = await Promise.all([
             supabase.from('dogs').select('*').eq('status', 'Adopted').order('name'),
             supabase.from('adoptions').select('*').eq('status', 'approved'),
@@ -490,7 +543,7 @@ export function AdoptedPage() {
           const adopters = new Map(((a as (Adoption & { decided_at: string | null })[]) || []).map((x) => [x.dog_id, x]))
           return {
             headers: ['OSO ID', 'Name', 'Sex', 'Age', 'Breed', 'Color', 'Size', 'Date of intake', 'Adopted on', 'Adopted by', 'Phone', 'Email', 'Address', 'Home', 'Other pets'],
-            rows: ((d as Dog[]) || []).map((x) => {
+            rows: ((d as Dog[]) || []).filter((x) => !month || monthOf(adopters.get(x.id)?.decided_at) === month).map((x) => {
               const ad = adopters.get(x.id)
               return [x.oso_id, x.name, x.sex, x.age, x.breed, x.color, x.size, isoDay(x.intake_at), isoDay(ad?.decided_at),
                 ad?.applicant, ad?.phone, ad?.email, ad?.address, ad?.home, ad?.pets]
@@ -526,11 +579,11 @@ export function MortalityPage() {
     <div>
       <div className="page-head-row">
         <h1 className="page-h1">Mortality</h1>
-        <DownloadButton name="pawtrack-mortality" build={async () => {
+        <DownloadButton name="pawtrack-mortality" dateLabel="date of death" build={async (month) => {
           const { data } = await supabase.from('dogs').select('*').eq('status', 'Deceased').order('died_at', { ascending: false })
           return {
             headers: ['OSO ID', 'Name', 'Sex', 'Age', 'Breed', 'Color', 'Size', 'Date of intake', 'Date of death', 'Days in care', '5-in-1 vaccine', 'Anti-rabies', 'Dewormed', 'Spayed / neutered'],
-            rows: ((data as Dog[]) || []).map((x) => [x.oso_id, x.name, x.sex, x.age, x.breed, x.color, x.size, isoDay(x.intake_at), isoDay(x.died_at),
+            rows: ((data as Dog[]) || []).filter((x) => !month || monthOf(x.died_at) === month).map((x) => [x.oso_id, x.name, x.sex, x.age, x.breed, x.color, x.size, isoDay(x.intake_at), isoDay(x.died_at),
               x.died_at ? Math.max(0, Math.round((new Date(x.died_at).getTime() - new Date(x.intake_at).getTime()) / 86400000)) : '',
               yes(x.vax_5in1), yes(x.anti_rabies), yes(x.dewormed), yes(x.spayed)]),
           }
@@ -1102,9 +1155,10 @@ export function AdoptionsPage() {
     <div>
       <div className="page-head-row">
         <h1 className="page-h1">Adoptions</h1>
-        <DownloadButton name="pawtrack-adoption-applications" build={async () => {
+        <DownloadButton name="pawtrack-adoption-applications" dateLabel="date the application was sent" build={async (month) => {
           const { data } = await supabase.from('adoptions').select('*, dogs(name, oso_id)').order('created_at', { ascending: false })
-          const list = (data as (Adoption & { decided_at: string | null; dogs?: { name: string; oso_id: string } | null })[]) || []
+          const list = ((data as (Adoption & { decided_at: string | null; dogs?: { name: string; oso_id: string } | null })[]) || [])
+            .filter((x) => !month || monthOf(x.created_at) === month)
           return {
             headers: ['Applied on', 'Dog', 'OSO ID', 'Applicant', 'Phone', 'Email', 'Address', 'Home', 'Other pets', 'Who wants to adopt / note', 'Status', 'Decided on'],
             rows: list.map((x) => [isoDay(x.created_at), x.dogs?.name, x.dogs?.oso_id, x.applicant, x.phone, x.email, x.address, x.home, x.pets, x.note,
